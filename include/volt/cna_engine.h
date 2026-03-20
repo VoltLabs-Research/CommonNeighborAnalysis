@@ -2,9 +2,9 @@
 
 #include <volt/core/volt.h>
 #include <volt/analysis/analysis_context.h>
-#include <volt/analysis/common_neighbor_analysis.h>
+#include <volt/cna.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/core/coordination_structures.h>
+#include <volt/coordination_structures.h>
 #include <volt/core/lammps_parser.h>
 #include <nlohmann/json.hpp>
 #include <array>

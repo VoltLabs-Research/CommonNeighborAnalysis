@@ -54,20 +54,30 @@ endif()
 
 set(LIB_SOURCES
     ${CMAKE_SOURCE_DIR}/src/cna_service.cpp
+    ${CMAKE_SOURCE_DIR}/src/cna.cpp
+    ${CMAKE_SOURCE_DIR}/src/structure_analysis_cna.cpp
+    ${CMAKE_SOURCE_DIR}/src/coordination_structures.cpp
 )
 
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_include_directories(${PROJECT_NAME}_lib PUBLIC
+get_target_property(STRUCTURE_IDENTIFICATION_INCLUDE_DIRS structure-identification::structure-identification INTERFACE_INCLUDE_DIRECTORIES)
+set(LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../StructureIdentification/include")
+if(EXISTS "${LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR}")
+    list(PREPEND STRUCTURE_IDENTIFICATION_INCLUDE_DIRS "${LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR}")
+endif()
+
+target_include_directories(${PROJECT_NAME}_lib BEFORE PUBLIC
+    ${STRUCTURE_IDENTIFICATION_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/include
 )
 target_precompile_headers(${PROJECT_NAME}_lib PRIVATE <volt/core/volt.h>)
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
     ${COMMON_NEIGHBOR_ANALYSIS_BOOST_TARGET}
     TBB::tbb
-    coretoolkit::coretoolkit
     structure-identification::structure-identification
+    coretoolkit::coretoolkit
     spdlog::spdlog
     nlohmann_json::nlohmann_json
 )
@@ -82,4 +92,4 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(TARGETS ${PROJECT_NAME}_lib DESTINATION lib)
-install(FILES ${CMAKE_SOURCE_DIR}/include/volt/cna_service.h DESTINATION include/volt)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include)

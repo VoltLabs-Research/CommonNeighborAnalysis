@@ -1,4 +1,4 @@
-#include <volt/common_neighbor_analysis_engine.h>
+#include <volt/cna_engine.h>
 #include <volt/core/neighbor_ordering.h>
 
 #include <tbb/blocked_range.h>

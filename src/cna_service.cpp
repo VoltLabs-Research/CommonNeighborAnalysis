@@ -124,7 +124,7 @@ json CommonNeighborAnalysisService::compute(
             StructureAnalysis::Mode::CNA,
             0.0f
         );
-        analysis.identifyStructures();
+        analysis.identifyStructuresCNA();
 
         std::vector<int> atomStructureTypes(
             static_cast<size_t>(frame.natoms),
