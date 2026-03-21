@@ -196,7 +196,8 @@ double CoordinationStructures::computeLocalCutoff(
 double CoordinationStructures::determineLocalStructure(
 	const NearestNeighborFinder& neighList, 
 	int particleIndex,
-	int* outNeighborCount
+	int* outNeighborCount,
+	int* outOrderedNeighborIndices
 ) const { 
     std::array<int, MAX_NEIGHBORS> neighborIndices;
     std::array<Vector3, MAX_NEIGHBORS> neighborVectors;
@@ -280,6 +281,12 @@ double CoordinationStructures::determineLocalStructure(
 
 	if(outNeighborCount){
 		*outNeighborCount = coordinationNumber;
+	}
+
+	if(outOrderedNeighborIndices){
+		for(int i = 0; i < coordinationNumber; ++i){
+			outOrderedNeighborIndices[i] = neighborIndices[neighborMapping[i]];
+		}
 	}
 
 	for(int i = 0; i < coordinationNumber; i++){

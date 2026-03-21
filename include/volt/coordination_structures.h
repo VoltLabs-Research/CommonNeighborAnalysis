@@ -17,7 +17,8 @@ public:
     double determineLocalStructure(
         const NearestNeighborFinder& neighList,
         int particleIndex,
-        int* outNeighborCount
+        int* outNeighborCount,
+        int* outOrderedNeighborIndices = nullptr
     ) const;
     
     static void initializeStructures();

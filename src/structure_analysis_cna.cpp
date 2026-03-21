@@ -111,13 +111,21 @@ void StructureAnalysis::identifyStructuresCNA(){
 
     const size_t N = _context.atomCount();
     std::vector<int> localCounts(N, 0);
+    std::vector<std::array<int, MAX_NEIGHBORS>> orderedNeighborIndices(N);
     _maximumNeighborDistance = tbb::parallel_reduce(
         tbb::blocked_range<size_t>(0, N),
         0.0,
-        [this, &neighFinder, &coordinationStructures, &localCounts](const tbb::blocked_range<size_t>& range, double maxDistSoFar) -> double {
+        [this, &neighFinder, &coordinationStructures, &localCounts, &orderedNeighborIndices](const tbb::blocked_range<size_t>& range, double maxDistSoFar) -> double {
             for(size_t index = range.begin(); index != range.end(); ++index){
                 int count = 0;
-                double localMaxDistance = coordinationStructures.determineLocalStructure(neighFinder, index, &count);
+                auto& neighbors = orderedNeighborIndices[index];
+                neighbors.fill(-1);
+                double localMaxDistance = coordinationStructures.determineLocalStructure(
+                    neighFinder,
+                    index,
+                    &count,
+                    neighbors.data()
+                );
                 localCounts[index] = count;
                 if(localMaxDistance > maxDistSoFar){
                     maxDistSoFar = localMaxDistance;
@@ -141,16 +149,14 @@ void StructureAnalysis::identifyStructuresCNA(){
 
     auto* indices = _context.neighborIndices->dataInt();
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N), [&](const auto& range){
-        NearestNeighborFinder::Query<MAX_NEIGHBORS> query(neighFinder);
         for(size_t index = range.begin(); index != range.end(); ++index){
             const int count = localCounts[index];
             if(count <= 0){
                 continue;
             }
-            query.findNeighbors(neighFinder.particlePos(index));
             const int start = offsets[index];
             for(int j = 0; j < count; ++j){
-                indices[start + j] = query.results()[j].index;
+                indices[start + j] = orderedNeighborIndices[index][j];
             }
             _context.neighborCounts->setInt(index, count);
         }
