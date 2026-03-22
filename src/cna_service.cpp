@@ -92,6 +92,10 @@ json CommonNeighborAnalysisService::compute(
     const LammpsParser::Frame& frame,
     const std::string& outputBase
 ){
+    if(_inputCrystalStructure == LATTICE_SC){
+        return AnalysisResult::failure("CNA does not support SC. Use PTM for simple cubic crystals.");
+    }
+
     if(frame.natoms <= 0){
         return AnalysisResult::failure("Invalid number of atoms");
     }

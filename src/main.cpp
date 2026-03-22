@@ -23,7 +23,7 @@ LatticeStructureType parseCrystalStructure(const std::string& value){
 void showUsage(const std::string& name){
     printUsageHeader(name, "Volt - Common Neighbor Analysis");
     std::cerr
-        << "  --crystalStructure <type>     Crystal structure. (FCC|BCC|HCP|SC|CUBIC_DIAMOND|HEX_DIAMOND) [default: FCC]\n"
+        << "  --crystalStructure <type>     Crystal structure. (FCC|BCC|HCP|CUBIC_DIAMOND|HEX_DIAMOND) [default: FCC]\n"
         << "  --threads <int>               Max worker threads (TBB/OMP). [default: auto]\n";
     printHelpOption();
 }
