@@ -12,7 +12,7 @@
 
 namespace Volt {
 
-namespace {
+namespace{
 
 void ensureCoordinationStructuresInitialized(){
     static std::once_flag initFlag;
@@ -21,80 +21,83 @@ void ensureCoordinationStructuresInitialized(){
     });
 }
 
-}
+class CnaCrystalInfoProvider final : public StructureAnalysisCrystalInfo{
+public:
+    int findClosestSymmetryPermutation(int structureType, const Matrix3& rotation) const override{
+        ensureCoordinationStructuresInitialized();
 
-int StructureAnalysis::findClosestSymmetryPermutation(int structureType, const Matrix3& rotation){
-    ensureCoordinationStructuresInitialized();
+        const LatticeStructure& lattice = CoordinationStructures::getLatticeStruct(structureType);
+        int bestIndex = 0;
+        double bestDeviation = std::numeric_limits<double>::max();
 
-    const LatticeStructure& lattice = CoordinationStructures::getLatticeStruct(structureType);
-    int bestIndex = 0;
-    double bestDeviation = std::numeric_limits<double>::max();
-
-    for(int i = 0; i < lattice.permutations.size(); ++i){
-        const Matrix3& sym = lattice.permutations[i].transformation;
-        double deviation = 0;
-        for(int r = 0; r < 3; ++r){
-            for(int c = 0; c < 3; ++c){
-                double diff = rotation(r, c) - sym(r, c);
-                deviation += diff * diff;
+        for(int i = 0; i < static_cast<int>(lattice.permutations.size()); ++i){
+            const Matrix3& symmetry = lattice.permutations[i].transformation;
+            double deviation = 0.0;
+            for(int row = 0; row < 3; ++row){
+                for(int column = 0; column < 3; ++column){
+                    const double diff = rotation(row, column) - symmetry(row, column);
+                    deviation += diff * diff;
+                }
+            }
+            if(deviation < bestDeviation){
+                bestDeviation = deviation;
+                bestIndex = i;
             }
         }
-        if(deviation < bestDeviation){
-            bestDeviation = deviation;
-            bestIndex = i;
-        }
+
+        return bestIndex;
     }
-    return bestIndex;
+
+    int coordinationNumber(int structureType) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getCoordStruct(structureType).numNeighbors;
+    }
+
+    int commonNeighborIndex(int structureType, int neighborIndex, int commonNeighborSlot) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getCoordStruct(structureType)
+            .commonNeighbors[neighborIndex][commonNeighborSlot];
+    }
+
+    int symmetryPermutationCount(int structureType) const override{
+        ensureCoordinationStructuresInitialized();
+        return static_cast<int>(CoordinationStructures::getLatticeStruct(structureType).permutations.size());
+    }
+
+    int symmetryPermutationEntry(int structureType, int symmetryIndex, int neighborIndex) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].permutation[neighborIndex];
+    }
+
+    const Matrix3& symmetryTransformation(int structureType, int symmetryIndex) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].transformation;
+    }
+
+    int symmetryInverseProduct(int structureType, int symmetryIndex, int transformationIndex) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].inverseProduct[transformationIndex];
+    }
+
+    const Vector3& latticeVector(int structureType, int latticeVectorIndex) const override{
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType).latticeVectors[latticeVectorIndex];
+    }
+};
+
+std::shared_ptr<const StructureAnalysisCrystalInfo> cnaCrystalInfoProvider(){
+    static const auto provider = std::make_shared<CnaCrystalInfoProvider>();
+    return provider;
 }
 
-int StructureAnalysis::coordinationNumber(int structureType) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getCoordStruct(structureType).numNeighbors;
-}
-
-int StructureAnalysis::commonNeighborIndex(int structureType, int neighborIndex, int commonNeighborSlot) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getCoordStruct(structureType).commonNeighbors[neighborIndex][commonNeighborSlot];
-}
-
-int StructureAnalysis::symmetryPermutationCount(int structureType) const{
-    ensureCoordinationStructuresInitialized();
-    return static_cast<int>(CoordinationStructures::getLatticeStruct(structureType).permutations.size());
-}
-
-int StructureAnalysis::symmetryPermutationEntry(int structureType, int symmetryIndex, int neighborIndex) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getLatticeStruct(structureType).permutations[symmetryIndex].permutation[neighborIndex];
-}
-
-const Matrix3& StructureAnalysis::symmetryTransformation(int structureType, int symmetryIndex) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getLatticeStruct(structureType).permutations[symmetryIndex].transformation;
-}
-
-int StructureAnalysis::symmetryInverseProduct(int structureType, int symmetryIndex, int transformationIndex) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getLatticeStruct(structureType).permutations[symmetryIndex].inverseProduct[transformationIndex];
-}
-
-const Vector3& StructureAnalysis::latticeVector(int structureType, int latticeVectorIndex) const{
-    ensureCoordinationStructuresInitialized();
-    return CoordinationStructures::getLatticeStruct(structureType).latticeVectors[latticeVectorIndex];
-}
-
-const Vector3& StructureAnalysis::neighborLatticeVector(int centralAtomIndex, int neighborIndex) const{
-    ensureCoordinationStructuresInitialized();
-
-    assert(_context.atomSymmetryPermutations);
-    const int structureType = _context.structureTypes->getInt(centralAtomIndex);
-    assert(neighborIndex >= 0 && neighborIndex < coordinationNumber(structureType));
-    const int symmetryPermutationIndex = _context.atomSymmetryPermutations->getInt(centralAtomIndex);
-    assert(symmetryPermutationIndex >= 0 && symmetryPermutationIndex < symmetryPermutationCount(structureType));
-    return latticeVector(structureType, symmetryPermutationEntry(structureType, symmetryPermutationIndex, neighborIndex));
 }
 
 void StructureAnalysis::identifyStructuresCNA(){
     ensureCoordinationStructuresInitialized();
+    setCrystalInfoProvider(cnaCrystalInfoProvider());
 
     const int maxNeighborListSize = MAX_NEIGHBORS;
     NearestNeighborFinder neighFinder(maxNeighborListSize);
@@ -105,14 +108,14 @@ void StructureAnalysis::identifyStructuresCNA(){
     CoordinationStructures coordinationStructures(
         _context.structureTypes,
         _context.inputCrystalType,
-        _identifyPlanarDefects,
+        true,
         _context.simCell
     );
 
     const size_t N = _context.atomCount();
     std::vector<int> localCounts(N, 0);
     std::vector<std::array<int, MAX_NEIGHBORS>> orderedNeighborIndices(N);
-    _maximumNeighborDistance = tbb::parallel_reduce(
+    _context.maximumNeighborDistance = tbb::parallel_reduce(
         tbb::blocked_range<size_t>(0, N),
         0.0,
         [this, &neighFinder, &coordinationStructures, &localCounts, &orderedNeighborIndices](const tbb::blocked_range<size_t>& range, double maxDistSoFar) -> double {

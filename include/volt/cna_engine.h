@@ -50,12 +50,7 @@ private:
         int particleIndex
     ) const;
 
-    void calculateStructureStatistics() const;
-
     AnalysisContext& _context;
-    bool _identifyPlanarDefects;
-    mutable std::map<int, int> _structureStatistics;
-    mutable bool _statisticsValid = false;
 };
 
 }

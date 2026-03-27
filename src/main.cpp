@@ -9,22 +9,11 @@ using namespace Volt::CLI;
 
 namespace {
 
-LatticeStructureType parseCrystalStructure(const std::string& value){
-    if(value == "FCC") return LATTICE_FCC;
-    if(value == "BCC") return LATTICE_BCC;
-    if(value == "HCP") return LATTICE_HCP;
-    if(value == "SC") return LATTICE_SC;
-    if(value == "CUBIC_DIAMOND") return LATTICE_CUBIC_DIAMOND;
-    if(value == "HEX_DIAMOND") return LATTICE_HEX_DIAMOND;
-    spdlog::warn("Unknown crystal structure '{}', defaulting to FCC.", value);
-    return LATTICE_FCC;
-}
-
 void showUsage(const std::string& name){
     printUsageHeader(name, "Volt - Common Neighbor Analysis");
     std::cerr
         << "  --crystalStructure <type>     Crystal structure. (FCC|BCC|HCP|CUBIC_DIAMOND|HEX_DIAMOND) [default: FCC]\n"
-        << "  --threads <int>               Max worker threads (TBB/OMP). [default: auto]\n";
+        << "  --dissolveSmallClusters       Mark small clusters as OTHER after building clusters.\n";
     printHelpOption();
 }
 
@@ -44,8 +33,7 @@ int main(int argc, char* argv[]){
         return filename.empty() ? 1 : 0;
     }
 
-    auto parallel = initParallelism(opts, false);
-    initLogging("volt-common-neighbor-analysis", parallel.threads);
+    initLogging("volt-common-neighbor-analysis");
 
     LammpsParser::Frame frame;
     if(!parseFrame(filename, frame)) return 1;
@@ -54,7 +42,14 @@ int main(int argc, char* argv[]){
     spdlog::info("Output base: {}", outputBase);
 
     CommonNeighborAnalysisService analyzer;
-    analyzer.setInputCrystalStructure(parseCrystalStructure(getString(opts, "--crystalStructure", "FCC")));
+    LatticeStructureType crystalStructure = LATTICE_FCC;
+    const std::string crystalStructureOption = getString(opts, "--crystalStructure", "FCC");
+    if(!parseLatticeStructureType(crystalStructureOption, crystalStructure)){
+        spdlog::warn("Unknown crystal structure '{}', defaulting to FCC.", crystalStructureOption);
+        crystalStructure = LATTICE_FCC;
+    }
+    analyzer.setInputCrystalStructure(crystalStructure);
+    analyzer.setDissolveSmallClusters(hasOption(opts, "--dissolveSmallClusters"));
 
     spdlog::info("Starting common neighbor analysis...");
     json result = analyzer.compute(frame, outputBase);

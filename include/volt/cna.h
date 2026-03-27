@@ -44,7 +44,6 @@ public:
         CNAPairBond* neighborBonds);
 
     static int calcMaxChainLength(CNAPairBond* neighborBonds, int numBonds);
-	static void generateCellTooSmallError(int dimension);
     static bool findMatchingNeighborPermutation(
         CoordinationStructureType coordinationType,
         int* neighborMapping,

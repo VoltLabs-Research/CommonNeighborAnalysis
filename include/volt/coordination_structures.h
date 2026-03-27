@@ -5,7 +5,7 @@
 #include <volt/coordination_structure.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
 #include <volt/core/particle_property.h>
-#include <volt/lattice_vectors.h>
+#include <volt/structures/lattice_vectors.h>
 #include <volt/analysis/analysis_context.h>
 
 namespace Volt{
@@ -98,7 +98,6 @@ public:
         return _simCell;
     }
 
-    static void generateCellTooSmallError(int dimension);
     static void findNonCoplanarVectors(const CoordinationStructure& coordStruct, int nindices[3], Matrix3& tm1);
 
 private:
@@ -171,9 +170,9 @@ private:
         const Matrix3& tm1inverse);
         
     const SimulationCell& _simCell;
-    bool _identifyPlanarDefects;
     ParticleProperty* _structureTypes;
     LatticeStructureType _inputCrystalType;
+    bool _identifyPlanarDefects;
 };
 
 }

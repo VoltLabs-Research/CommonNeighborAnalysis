@@ -55,6 +55,7 @@ endif()
 set(LIB_SOURCES
     ${CMAKE_SOURCE_DIR}/src/cna_service.cpp
     ${CMAKE_SOURCE_DIR}/src/cna.cpp
+    ${CMAKE_SOURCE_DIR}/src/cna_cluster_builder.cpp
     ${CMAKE_SOURCE_DIR}/src/structure_analysis_cna.cpp
     ${CMAKE_SOURCE_DIR}/src/coordination_structures.cpp
 )

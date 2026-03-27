@@ -15,6 +15,7 @@ public:
     CommonNeighborAnalysisService();
 
     void setInputCrystalStructure(LatticeStructureType structureType);
+    void setDissolveSmallClusters(bool dissolveSmallClusters);
 
     json compute(
         const LammpsParser::Frame& frame,
@@ -23,6 +24,7 @@ public:
 
 private:
     LatticeStructureType _inputCrystalStructure;
+    bool _dissolveSmallClusters;
 };
 
 }

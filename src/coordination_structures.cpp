@@ -51,15 +51,10 @@ CoordinationStructures::CoordinationStructures(
 	LatticeStructureType inputCrystalType,
 	bool identifyPlanarDefects,
 	const SimulationCell& simCell
-) : _structureTypes(structureTypes)
-	, _inputCrystalType(inputCrystalType)
-	, _identifyPlanarDefects(identifyPlanarDefects)
-	, _simCell(simCell){}
-
-void CoordinationStructures::generateCellTooSmallError(int dimension){
-	static const char* axes[3] = { "X", "Y", "Z" };
-	// TODO
-}
+	) : _structureTypes(structureTypes)
+		, _inputCrystalType(inputCrystalType)
+		, _identifyPlanarDefects(identifyPlanarDefects)
+		, _simCell(simCell){}
 
 int CoordinationStructures::getCoordinationNumber() const{
 	switch(_inputCrystalType){
@@ -236,9 +231,9 @@ double CoordinationStructures::determineLocalStructure(
         previousMapping[n] = -1;
     }
 
-	CoordinationStructureType coordinationType = CommonNeighborAnalysis::computeCoordinationType(
-		neighborArray, coordinationNumber, cnaSignatures.data(),
-		_inputCrystalType, _identifyPlanarDefects);
+		CoordinationStructureType coordinationType = CommonNeighborAnalysis::computeCoordinationType(
+			neighborArray, coordinationNumber, cnaSignatures.data(),
+			_inputCrystalType, _identifyPlanarDefects);
 
 	if(coordinationType == COORD_OTHER) return 0.0;
 
@@ -286,17 +281,6 @@ double CoordinationStructures::determineLocalStructure(
 	if(outOrderedNeighborIndices){
 		for(int i = 0; i < coordinationNumber; ++i){
 			outOrderedNeighborIndices[i] = neighborIndices[neighborMapping[i]];
-		}
-	}
-
-	for(int i = 0; i < coordinationNumber; i++){
-		const Vector3& neighborVector = neighborVectors[neighborMapping[i]];
-		for(int dim = 0; dim < 3; dim++){
-			if(cell().pbcFlags()[dim]){
-				if(std::abs(cell().inverseMatrix().prodrow(neighborVector, dim)) >= 0.5 + EPSILON){
-					generateCellTooSmallError(dim);
-				}
-			}
 		}
 	}
 

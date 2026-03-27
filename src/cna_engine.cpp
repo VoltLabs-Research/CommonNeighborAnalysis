@@ -8,8 +8,7 @@
 namespace Volt{
 
 CommonNeighborAnalysisEngine::CommonNeighborAnalysisEngine(AnalysisContext& context, bool identifyPlanarDefects)
-    : _context(context)
-    , _identifyPlanarDefects(identifyPlanarDefects){}
+    : _context(context){}
 
 int CommonNeighborAnalysisEngine::coordinationNumber() const{
     switch(_context.inputCrystalType){
@@ -179,8 +178,7 @@ double CommonNeighborAnalysisEngine::determineLocalStructure(
         neighborArray,
         coordinationCount,
         cnaSignatures.data(),
-        _context.inputCrystalType,
-        _identifyPlanarDefects
+        _context.inputCrystalType
     );
     if(coordinationType == COORD_OTHER){
         return 0.0;
@@ -231,17 +229,6 @@ double CommonNeighborAnalysisEngine::determineLocalStructure(
         atomStructure,
         particleIndex
     );
-
-    for(int i = 0; i < coordinationCount; i++){
-        const Vector3& neighborVector = neighborVectors[neighborMapping[i]];
-        for(int dim = 0; dim < 3; dim++){
-            if(_context.simCell.pbcFlags()[dim]){
-                if(std::abs(_context.simCell.inverseMatrix().prodrow(neighborVector, dim)) >= 0.5 + EPSILON){
-                    CoordinationStructures::generateCellTooSmallError(dim);
-                }
-            }
-        }
-    }
 
     return localCutoff;
 }
@@ -297,22 +284,9 @@ void CommonNeighborAnalysisEngine::identifyStructures(){
             determineLocalStructure(neighFinder, static_cast<int>(index));
         }
     });
-
-    invalidateStatistics();
 }
 
 void CommonNeighborAnalysisEngine::calculateStructureStatistics() const{
-    _structureStatistics.clear();
-    const size_t N = _context.atomCount();
-    for(size_t i = 0; i < N; ++i){
-        int structureType = _context.structureTypes->getInt(i);
-        _structureStatistics[structureType]++;
-    }
-    _statisticsValid = true;
-}
-
-void CommonNeighborAnalysisEngine::invalidateStatistics(){
-    _statisticsValid = false;
 }
 
 std::string CommonNeighborAnalysisEngine::getStructureTypeName(int structureType) const{
@@ -320,41 +294,6 @@ std::string CommonNeighborAnalysisEngine::getStructureTypeName(int structureType
 }
 
 json CommonNeighborAnalysisEngine::buildMainListing() const{
-    if(!_statisticsValid){
-        calculateStructureStatistics();
-    }
-
-    const int N = static_cast<int>(_context.atomCount());
-    const double invN = (N > 0) ? (100.0 / static_cast<double>(N)) : 0.0;
-
-    int totalIdentified = 0;
-    int unidentified = 0;
-    auto itOther = _structureStatistics.find(static_cast<int>(StructureType::OTHER));
-    if(itOther != _structureStatistics.end()){
-        unidentified = itOther->second;
-    }
-
-    json mainListing = json::object();
-    mainListing["total_atoms"] = N;
-    mainListing["analysis_method"] = "CNA";
-
-    for(const auto& [structureType, count] : _structureStatistics){
-        std::string name = getStructureTypeName(structureType);
-        std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-        mainListing[name + "_count"] = count;
-        mainListing[name + "_percentage"] = static_cast<double>(count) * invN;
-        if(structureType != static_cast<int>(StructureType::OTHER) &&
-           structureType != static_cast<int>(CoordinationStructureType::COORD_OTHER)){
-            totalIdentified += count;
-        }
-    }
-
-    mainListing["total_identified"] = totalIdentified;
-    mainListing["total_unidentified"] = unidentified;
-    mainListing["identification_rate"] = static_cast<double>(totalIdentified) * invN;
-    mainListing["unique_structure_types"] = static_cast<int>(_structureStatistics.size());
-
-    return mainListing;
 }
 
 json CommonNeighborAnalysisEngine::getPerAtomProperties(const LammpsParser::Frame& frame) const{
