@@ -1,4 +1,4 @@
-#include <volt/analysis/structure_analysis.h>
+#include <volt/cna_structure_analysis.h>
 #include <volt/coordination_structures.h>
 
 #include <tbb/blocked_range.h>
@@ -95,30 +95,31 @@ std::shared_ptr<const StructureAnalysisCrystalInfo> cnaCrystalInfoProvider(){
 
 }
 
-void StructureAnalysis::identifyStructuresCNA(){
+void identifyStructuresCNA(StructureAnalysis& analysis){
+    StructureContext& context = analysis.context();
     ensureCoordinationStructuresInitialized();
-    setCrystalInfoProvider(cnaCrystalInfoProvider());
+    analysis.setCrystalInfoProvider(cnaCrystalInfoProvider());
 
     const int maxNeighborListSize = MAX_NEIGHBORS;
     NearestNeighborFinder neighFinder(maxNeighborListSize);
-    if(!neighFinder.prepare(_context.positions, _context.simCell, _context.particleSelection)){
+    if(!neighFinder.prepare(context.positions, context.simCell, context.particleSelection)){
         throw std::runtime_error("Error in neighFinder.preapre(...)");
     }
 
     CoordinationStructures coordinationStructures(
-        _context.structureTypes,
-        _context.inputCrystalType,
+        context.structureTypes,
+        context.inputCrystalType,
         true,
-        _context.simCell
+        context.simCell
     );
 
-    const size_t N = _context.atomCount();
+    const size_t N = context.atomCount();
     std::vector<int> localCounts(N, 0);
     std::vector<std::array<int, MAX_NEIGHBORS>> orderedNeighborIndices(N);
-    _context.maximumNeighborDistance = tbb::parallel_reduce(
+    context.maximumNeighborDistance = tbb::parallel_reduce(
         tbb::blocked_range<size_t>(0, N),
         0.0,
-        [this, &neighFinder, &coordinationStructures, &localCounts, &orderedNeighborIndices](const tbb::blocked_range<size_t>& range, double maxDistSoFar) -> double {
+        [&neighFinder, &coordinationStructures, &localCounts, &orderedNeighborIndices](const tbb::blocked_range<size_t>& range, double maxDistSoFar) -> double {
             for(size_t index = range.begin(); index != range.end(); ++index){
                 int count = 0;
                 auto& neighbors = orderedNeighborIndices[index];
@@ -141,16 +142,16 @@ void StructureAnalysis::identifyStructuresCNA(){
         }
     );
 
-    auto* offsets = _context.neighborOffsets->dataInt();
+    auto* offsets = context.neighborOffsets->dataInt();
     offsets[0] = 0;
     for(size_t i = 0; i < N; ++i){
         offsets[i + 1] = offsets[i] + localCounts[i];
     }
     const size_t totalNeighbors = static_cast<size_t>(offsets[N]);
-    _context.neighborIndices = std::make_shared<ParticleProperty>(
+    context.neighborIndices = std::make_shared<ParticleProperty>(
         totalNeighbors, DataType::Int, 1, 0, false);
 
-    auto* indices = _context.neighborIndices->dataInt();
+    auto* indices = context.neighborIndices->dataInt();
     tbb::parallel_for(tbb::blocked_range<size_t>(0, N), [&](const auto& range){
         for(size_t index = range.begin(); index != range.end(); ++index){
             const int count = localCounts[index];
@@ -161,7 +162,7 @@ void StructureAnalysis::identifyStructuresCNA(){
             for(int j = 0; j < count; ++j){
                 indices[start + j] = orderedNeighborIndices[index][j];
             }
-            _context.neighborCounts->setInt(index, count);
+            context.neighborCounts->setInt(index, count);
         }
     });
 }

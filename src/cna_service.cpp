@@ -1,9 +1,11 @@
 #include <volt/cna_service.h>
 
 #include <volt/analysis/analysis_context.h>
+#include <volt/analysis/cluster_builder.h>
 #include <volt/analysis/cluster_graph_export.h>
 #include <volt/analysis/structure_analysis.h>
-#include <volt/cna_cluster_builder.h>
+#include <volt/cna_cluster_input_adapter.h>
+#include <volt/cna_structure_analysis.h>
 #include <volt/core/analysis_result.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/particle_property.h>
@@ -202,7 +204,7 @@ json CommonNeighborAnalysisService::compute(
     const std::string& outputBase
 ){
     if(_inputCrystalStructure == LATTICE_SC){
-        return AnalysisResult::failure("CNA does not support SC. Use PTM for simple cubic crystals.");
+        return AnalysisResult::failure("CNA does not support SC. Use PTM for this crystal.");
     }
 
     FrameAdapter::PreparedAnalysisInput prepared;
@@ -229,8 +231,10 @@ json CommonNeighborAnalysisService::compute(
         StructureAnalysis analysis(
             context
         );
-        analysis.identifyStructuresCNA();
-        CNAClusterBuilder clusterBuilder(analysis, context);
+        identifyStructuresCNA(analysis);
+        CNAClusterInputAdapter clusterInputAdapter;
+        clusterInputAdapter.prepare(analysis, context);
+        ClusterBuilder clusterBuilder(analysis, context);
         clusterBuilder.build(_dissolveSmallClusters);
 
         std::vector<int> atomStructureTypes(
