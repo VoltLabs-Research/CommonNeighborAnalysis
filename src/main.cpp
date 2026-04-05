@@ -46,7 +46,7 @@ int main(int argc, char* argv[]){
     analyzer.setDissolveSmallClusters(hasOption(opts, "--dissolveSmallClusters"));
 
     spdlog::info("Starting common neighbor analysis...");
-    json result = analyzer.compute(frame, outputBase);
+    json result = analyzer.compute(frame, outputBase, filename);
     if(result.value("is_failed", false)){
         spdlog::error("Analysis failed: {}", result.value("error", "Unknown error"));
         return 1;

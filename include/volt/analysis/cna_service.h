@@ -19,7 +19,8 @@ public:
 
     json compute(
         const LammpsParser::Frame& frame,
-        const std::string& outputBase = ""
+        const std::string& outputBase,
+        const std::string& inputDumpPath
     );
 
 private:

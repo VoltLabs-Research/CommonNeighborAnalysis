@@ -202,7 +202,8 @@ void CommonNeighborAnalysisService::setDissolveSmallClusters(bool dissolveSmallC
 
 json CommonNeighborAnalysisService::compute(
     const LammpsParser::Frame& frame,
-    const std::string& outputBase
+    const std::string& outputBase,
+    const std::string& inputDumpPath
 ){
     if(_inputCrystalStructure == LATTICE_SC){
         return AnalysisResult::failure("CNA does not support SC. Use PTM for this crystal.");
@@ -257,16 +258,18 @@ json CommonNeighborAnalysisService::compute(
             )){
                 return AnalysisResult::failure("Failed to write " + atomsPath);
             }
-            if(!AnalysisPipelineUtils::appendClusterOutputs(
-                frame,
-                outputBase,
-                context,
-                analysis,
-                result,
-                &frameError
-            )){
-                return AnalysisResult::failure(frameError);
-            }
+        }
+
+        if(!AnalysisPipelineUtils::appendClusterOutputs(
+            frame,
+            outputBase,
+            inputDumpPath,
+            context,
+            analysis,
+            result,
+            &frameError
+        )){
+            return AnalysisResult::failure(frameError);
         }
 
         result["is_failed"] = false;
