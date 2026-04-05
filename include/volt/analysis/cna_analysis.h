@@ -1,8 +1,8 @@
 #pragma once
 
 #include <volt/core/volt.h>
-#include <volt/analysis/analysis_context.h>
-#include <volt/cna_local_structure_utils.h>
+#include <volt/analysis/structure_analysis_context.h>
+#include <volt/analysis/cna_local_structure.h>
 #include <volt/core/lammps_parser.h>
 #include <nlohmann/json.hpp>
 #include <array>

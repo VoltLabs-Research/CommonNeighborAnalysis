@@ -2,7 +2,7 @@
 
 #include <volt/core/volt.h>
 #include <volt/structures/neighbor_bond_array.h>
-#include <volt/coordination_structure.h>
+#include <volt/topology/crystal_coordination_pattern.h>
 
 namespace Volt{
 

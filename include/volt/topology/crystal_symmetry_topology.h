@@ -4,7 +4,7 @@
 #include <array>
 #include <volt/math/lin_alg.h>
 #include <volt/structures/crystal_structure_types.h>
-#include <volt/coordination_structure.h>
+#include <volt/topology/crystal_coordination_pattern.h>
 
 namespace Volt {
 

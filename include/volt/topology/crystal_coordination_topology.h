@@ -1,13 +1,13 @@
 #pragma once
 
 #include <volt/core/volt.h>
-#include <volt/lattice_structure.h>
-#include <volt/coordination_structure.h>
+#include <volt/topology/crystal_symmetry_topology.h>
+#include <volt/topology/crystal_coordination_pattern.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
 #include <volt/core/particle_property.h>
 #include <volt/structures/lattice_vectors.h>
-#include <volt/analysis/analysis_context.h>
-#include <volt/cna_local_structure_utils.h>
+#include <volt/analysis/structure_analysis_context.h>
+#include <volt/analysis/cna_local_structure.h>
 
 namespace Volt{
     

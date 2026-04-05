@@ -1,5 +1,5 @@
-#include <volt/cna_cluster_input_adapter.h>
-#include <volt/analysis/cluster_input_adapter_utils.h>
+#include <volt/analysis/cna_cluster_input_adapter.h>
+#include <volt/analysis/cluster_input_preparation.h>
 
 namespace Volt{
 

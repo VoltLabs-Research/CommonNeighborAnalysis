@@ -1,8 +1,8 @@
 #pragma once
 
 #include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/cna.h>
-#include <volt/coordination_structure.h>
+#include <volt/analysis/cna_classifier.h>
+#include <volt/topology/crystal_coordination_pattern.h>
 
 #include <array>
 

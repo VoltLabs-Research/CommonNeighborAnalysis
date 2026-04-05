@@ -69,11 +69,11 @@ if(EXISTS "${LOCAL_STRUCTURE_IDENTIFICATION_LIB}")
 endif()
 
 set(LIB_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/cna_service.cpp
-    ${CMAKE_SOURCE_DIR}/src/cna.cpp
-    ${CMAKE_SOURCE_DIR}/src/cna_cluster_input_adapter.cpp
-    ${CMAKE_SOURCE_DIR}/src/structure_analysis_cna.cpp
-    ${CMAKE_SOURCE_DIR}/src/coordination_structures.cpp
+    ${CMAKE_SOURCE_DIR}/src/analysis/cna_service.cpp
+    ${CMAKE_SOURCE_DIR}/src/analysis/cna_classifier.cpp
+    ${CMAKE_SOURCE_DIR}/src/analysis/cna_cluster_input_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/analysis/cna_structure_analysis.cpp
+    ${CMAKE_SOURCE_DIR}/src/topology/crystal_coordination_topology.cpp
 )
 
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})

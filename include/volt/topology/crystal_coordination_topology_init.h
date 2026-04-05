@@ -1,6 +1,6 @@
 #pragma once
 
-#include <volt/coordination_structures.h>
+#include <volt/topology/crystal_coordination_topology.h>
 
 #include <mutex>
 

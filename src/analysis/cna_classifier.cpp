@@ -1,4 +1,4 @@
-#include <volt/cna.h>
+#include <volt/analysis/cna_classifier.h>
 
 namespace Volt{
 

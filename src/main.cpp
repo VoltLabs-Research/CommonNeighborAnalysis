@@ -1,5 +1,5 @@
 #include <volt/cli/common.h>
-#include <volt/cna_service.h>
+#include <volt/analysis/cna_service.h>
 #include <volt/structures/crystal_structure_types.h>
 
 #include <string>

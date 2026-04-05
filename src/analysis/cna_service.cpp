@@ -1,12 +1,12 @@
-#include <volt/cna_service.h>
+#include <volt/analysis/cna_service.h>
 
-#include <volt/analysis/analysis_pipeline_utils.h>
-#include <volt/analysis/analysis_context.h>
-#include <volt/analysis/cluster_builder.h>
-#include <volt/analysis/cluster_graph_export.h>
+#include <volt/analysis/reconstructed_analysis_pipeline.h>
+#include <volt/analysis/structure_analysis_context.h>
+#include <volt/analysis/cluster_graph_builder.h>
+#include <volt/analysis/cluster_graph_io.h>
 #include <volt/analysis/structure_analysis.h>
-#include <volt/cna_cluster_input_adapter.h>
-#include <volt/cna_structure_analysis.h>
+#include <volt/analysis/cna_cluster_input_adapter.h>
+#include <volt/analysis/cna_structure_analysis.h>
 #include <volt/core/analysis_result.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/particle_property.h>
@@ -244,7 +244,7 @@ json CommonNeighborAnalysisService::compute(
         );
 
         if(!outputBase.empty()){
-            const std::string msgpackPath = outputBase + "_common_neighbor_analysis.msgpack";
+            const std::string msgpackPath = outputBase + "_cna_analysis.msgpack";
             if(!JsonUtils::writeJsonMsgpackToFile(result, msgpackPath, false)){
                 return AnalysisResult::failure("Failed to write " + msgpackPath);
             }

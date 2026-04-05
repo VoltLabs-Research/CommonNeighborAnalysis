@@ -1,7 +1,7 @@
-#include <volt/coordination_structures.h>
-#include <volt/analysis/analysis_context.h>
-#include <volt/cna.h>
-#include <volt/analysis/symmetry_utils.h>
+#include <volt/topology/crystal_coordination_topology.h>
+#include <volt/analysis/structure_analysis_context.h>
+#include <volt/analysis/cna_classifier.h>
+#include <volt/analysis/crystal_symmetry_utils.h>
 
 namespace Volt{
 

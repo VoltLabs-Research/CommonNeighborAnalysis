@@ -1,6 +1,6 @@
-#include <volt/cna_engine.h>
+#include <volt/analysis/cna_analysis.h>
 #include <volt/core/neighbor_ordering.h>
-#include <volt/coordination_structures_utils.h>
+#include <volt/topology/crystal_coordination_topology_init.h>
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
