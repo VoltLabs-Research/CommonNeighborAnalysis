@@ -2,13 +2,10 @@
 
 #include <volt/core/volt.h>
 #include <volt/analysis/analysis_context.h>
-#include <volt/cna.h>
-#include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/coordination_structures.h>
+#include <volt/cna_local_structure_utils.h>
 #include <volt/core/lammps_parser.h>
 #include <nlohmann/json.hpp>
 #include <array>
-#include <map>
 
 namespace Volt{
 
@@ -26,17 +23,8 @@ public:
     std::string getStructureTypeName(int structureType) const;
 
 private:
-    int coordinationNumber() const;
-    double computeLocalCutoff(
-        const NearestNeighborFinder& neighList,
-        const NearestNeighborFinder::Query<MAX_NEIGHBORS>& neighQuery,
-        int numNeighbors,
-        int coordinationNumber,
-        int particleIndex,
-        int* neighborIndices,
-        Vector3* neighborVectors,
-        NeighborBondArray& neighborArray
-    ) const;
+    void identifyStructures();
+    void calculateStructureStatistics() const;
 
     double determineLocalStructure(
         const NearestNeighborFinder& neighList,
@@ -51,6 +39,7 @@ private:
     ) const;
 
     AnalysisContext& _context;
+    bool _identifyPlanarDefects = false;
 };
 
 }

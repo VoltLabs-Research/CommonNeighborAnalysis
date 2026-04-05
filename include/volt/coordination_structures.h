@@ -7,6 +7,7 @@
 #include <volt/core/particle_property.h>
 #include <volt/structures/lattice_vectors.h>
 #include <volt/analysis/analysis_context.h>
+#include <volt/cna_local_structure_utils.h>
 
 namespace Volt{
     
@@ -92,8 +93,6 @@ public:
 
     static CoordinationStructure _coordinationStructures[NUM_COORD_TYPES];
     static LatticeStructure _latticeStructures[NUM_LATTICE_TYPES];
-    int getCoordinationNumber() const;
-
     const SimulationCell& cell() const{
         return _simCell;
     }
@@ -101,12 +100,6 @@ public:
     static void findNonCoplanarVectors(const CoordinationStructure& coordStruct, int nindices[3], Matrix3& tm1);
 
 private:
-    CoordinationStructureType computeCoordinationType(
-        const NeighborBondArray& neighborArray,
-        int coordinationNumber,
-        int* cnaSignatures
-    ) const;
-
     static void initializeDiamondStructure(
         int coordType, 
         int latticeType,
@@ -139,35 +132,11 @@ private:
     static void initializeHexagonalDiamond();
     static void initializeOther();
     
-    double computeLocalCutoff(
-        const NearestNeighborFinder& neighList, 
-        const NearestNeighborFinder::Query<MAX_NEIGHBORS>& neighQuery,
-        int numNeighbors,
-        int coordinationNumber,
-        int particleIndex,
-        int* neighborIndices,
-        Vector3* neighborVectors,
-        NeighborBondArray& neighborArray
-    ) const;
-
     static void calculateSymmetryProducts(LatticeStructure& latticeStruct);
     static void generateSymmetryPermutations(LatticeStructure& latticeStruct);
     static void initializeSymmetryInformation();
     static void findCommonNeighborsForBond(CoordinationStructure& coordStruct, int neighborIndex);
     static void initializeCommonNeighbors();
-
-    static void calculateProductForPermutation(
-        LatticeStructure& latticeStruct, 
-        int s1, 
-        int s2);
-
-    static void findAllSymmetryPermutations(
-        LatticeStructure& latticeStruct,
-        const CoordinationStructure& coordStruct,
-        std::vector<int>& permutation,
-        const int nindices[3],
-        const Matrix3& tm1,
-        const Matrix3& tm1inverse);
         
     const SimulationCell& _simCell;
     ParticleProperty* _structureTypes;

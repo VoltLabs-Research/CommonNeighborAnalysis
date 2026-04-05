@@ -1,25 +1,18 @@
 #include <volt/cna_structure_analysis.h>
+#include <volt/analysis/symmetry_utils.h>
 #include <volt/coordination_structures.h>
+#include <volt/coordination_structures_utils.h>
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
 #include <tbb/parallel_reduce.h>
 
 #include <algorithm>
-#include <limits>
-#include <mutex>
 #include <vector>
 
 namespace Volt {
 
 namespace CnaStructureAnalysisDetail{
-
-void ensureCoordinationStructuresInitialized(){
-    static std::once_flag initFlag;
-    std::call_once(initFlag, []() {
-        CoordinationStructures::initializeStructures();
-    });
-}
 
 class CnaCrystalInfoProvider final : public StructureAnalysisCrystalInfo{
 public:
@@ -27,25 +20,7 @@ public:
         ensureCoordinationStructuresInitialized();
 
         const LatticeStructure& lattice = CoordinationStructures::getLatticeStruct(structureType);
-        int bestIndex = 0;
-        double bestDeviation = std::numeric_limits<double>::max();
-
-        for(int i = 0; i < static_cast<int>(lattice.permutations.size()); ++i){
-            const Matrix3& symmetry = lattice.permutations[i].transformation;
-            double deviation = 0.0;
-            for(int row = 0; row < 3; ++row){
-                for(int column = 0; column < 3; ++column){
-                    const double diff = rotation(row, column) - symmetry(row, column);
-                    deviation += diff * diff;
-                }
-            }
-            if(deviation < bestDeviation){
-                bestDeviation = deviation;
-                bestIndex = i;
-            }
-        }
-
-        return bestIndex;
+        return AnalysisSymmetryUtils::findClosestSymmetryPermutation(lattice.permutations, rotation);
     }
 
     int coordinationNumber(int structureType) const override{

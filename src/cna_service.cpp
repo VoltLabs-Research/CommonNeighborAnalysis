@@ -1,5 +1,6 @@
 #include <volt/cna_service.h>
 
+#include <volt/analysis/analysis_pipeline_utils.h>
 #include <volt/analysis/analysis_context.h>
 #include <volt/analysis/cluster_builder.h>
 #include <volt/analysis/cluster_graph_export.h>
@@ -207,30 +208,19 @@ json CommonNeighborAnalysisService::compute(
         return AnalysisResult::failure("CNA does not support SC. Use PTM for this crystal.");
     }
 
-    FrameAdapter::PreparedAnalysisInput prepared;
     std::string frameError;
-    if(!FrameAdapter::prepareAnalysisInput(frame, prepared, &frameError)){
+    auto session = AnalysisPipelineUtils::prepareAnalysisSession(
+        frame,
+        _inputCrystalStructure,
+        &frameError
+    );
+    if(!session){
         return AnalysisResult::failure(frameError);
     }
-
-    auto positions = std::move(prepared.positions);
-
-    auto structureTypes = std::make_unique<ParticleProperty>(frame.natoms, DataType::Int, 1, 0, true);
-    std::vector<Matrix3> preferredOrientations{Matrix3::Identity()};
-
-    AnalysisContext context(
-        positions.get(),
-        frame.simulationCell,
-        _inputCrystalStructure,
-        nullptr,
-        structureTypes.get(),
-        std::move(preferredOrientations)
-    );
+    AnalysisContext& context = session->context;
 
     try{
-        StructureAnalysis analysis(
-            context
-        );
+        StructureAnalysis analysis(context);
         identifyStructuresCNA(analysis);
         CNAClusterInputAdapter clusterInputAdapter;
         clusterInputAdapter.prepare(analysis, context);
@@ -254,11 +244,6 @@ json CommonNeighborAnalysisService::compute(
         );
 
         if(!outputBase.empty()){
-            const std::string dumpPath = outputBase + "_annotated.dump";
-            if(!context.writeDumpWithContext(frame, dumpPath, &analysis)){
-                return AnalysisResult::failure("Failed to write " + dumpPath);
-            }
-
             const std::string msgpackPath = outputBase + "_common_neighbor_analysis.msgpack";
             if(!JsonUtils::writeJsonMsgpackToFile(result, msgpackPath, false)){
                 return AnalysisResult::failure("Failed to write " + msgpackPath);
@@ -272,15 +257,16 @@ json CommonNeighborAnalysisService::compute(
             )){
                 return AnalysisResult::failure("Failed to write " + atomsPath);
             }
-
-            ClusterGraphExportPaths clusterGraphPaths;
-            if(!exportClusterGraph(analysis.clusterGraph(), outputBase, &clusterGraphPaths)){
-                return AnalysisResult::failure("Failed to export cluster graph tables");
+            if(!AnalysisPipelineUtils::appendClusterOutputs(
+                frame,
+                outputBase,
+                context,
+                analysis,
+                result,
+                &frameError
+            )){
+                return AnalysisResult::failure(frameError);
             }
-
-            result["annotated_dump"] = dumpPath;
-            result["clusters_table"] = clusterGraphPaths.clustersTablePath;
-            result["cluster_transitions_table"] = clusterGraphPaths.clusterTransitionsTablePath;
         }
 
         result["is_failed"] = false;
