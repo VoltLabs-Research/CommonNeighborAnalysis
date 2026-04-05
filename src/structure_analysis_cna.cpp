@@ -12,7 +12,7 @@
 
 namespace Volt {
 
-namespace{
+namespace CnaStructureAnalysisDetail{
 
 void ensureCoordinationStructuresInitialized(){
     static std::once_flag initFlag;
@@ -94,6 +94,8 @@ std::shared_ptr<const StructureAnalysisCrystalInfo> cnaCrystalInfoProvider(){
 }
 
 }
+
+using namespace CnaStructureAnalysisDetail;
 
 void identifyStructuresCNA(StructureAnalysis& analysis){
     StructureContext& context = analysis.context();

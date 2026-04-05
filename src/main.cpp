@@ -7,7 +7,7 @@
 using namespace Volt;
 using namespace Volt::CLI;
 
-namespace {
+namespace Volt::CnaCliDetail {
 
 void showUsage(const std::string& name){
     printUsageHeader(name, "Volt - Common Neighbor Analysis");
@@ -21,7 +21,7 @@ void showUsage(const std::string& name){
 
 int main(int argc, char* argv[]){
     if(argc < 2){
-        showUsage(argv[0]);
+        Volt::CnaCliDetail::showUsage(argv[0]);
         return 1;
     }
 
@@ -29,7 +29,7 @@ int main(int argc, char* argv[]){
     auto opts = parseArgs(argc, argv, filename, outputBase);
 
     if(hasOption(opts, "--help") || filename.empty()){
-        showUsage(argv[0]);
+        Volt::CnaCliDetail::showUsage(argv[0]);
         return filename.empty() ? 1 : 0;
     }
 

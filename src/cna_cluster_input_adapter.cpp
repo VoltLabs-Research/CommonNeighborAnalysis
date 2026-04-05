@@ -6,7 +6,7 @@
 
 namespace Volt{
 
-namespace{
+namespace CnaClusterInputAdapterDetail{
 
 std::uint64_t fullSymmetryMask(int symmetryCount){
     if(symmetryCount <= 0){
@@ -19,6 +19,8 @@ std::uint64_t fullSymmetryMask(int symmetryCount){
 }
 
 }
+
+using namespace CnaClusterInputAdapterDetail;
 
 void CNAClusterInputAdapter::prepare(StructureAnalysis& analysis, AnalysisContext& context){
     analysis.setClusterRuleProvider(nullptr);

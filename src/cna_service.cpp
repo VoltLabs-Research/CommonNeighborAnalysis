@@ -20,7 +20,7 @@ namespace Volt{
 
 using namespace Volt::Particles;
 
-namespace{
+namespace CnaServiceDetail{
 
 std::string structureTypeNameForExport(int structureType){
     switch(static_cast<StructureType>(structureType)){
@@ -246,8 +246,8 @@ json CommonNeighborAnalysisService::compute(
         }
 
         json result;
-        result["main_listing"] = buildMainListing(atomStructureTypes);
-        result["per-atom-properties"] = buildPerAtomProperties(
+        result["main_listing"] = CnaServiceDetail::buildMainListing(atomStructureTypes);
+        result["per-atom-properties"] = CnaServiceDetail::buildPerAtomProperties(
             frame,
             atomStructureTypes,
             context.atomClusters.get()
@@ -266,7 +266,7 @@ json CommonNeighborAnalysisService::compute(
 
             const std::string atomsPath = outputBase + "_atoms.msgpack";
             if(!JsonUtils::writeJsonMsgpackToFile(
-                buildAtomsExport(frame, atomStructureTypes, context.atomClusters.get()),
+                CnaServiceDetail::buildAtomsExport(frame, atomStructureTypes, context.atomClusters.get()),
                 atomsPath,
                 false
             )){
