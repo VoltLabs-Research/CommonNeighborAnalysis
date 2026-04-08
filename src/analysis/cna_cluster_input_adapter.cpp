@@ -8,8 +8,14 @@ void CNAClusterInputAdapter::prepare(StructureAnalysis& analysis, AnalysisContex
         analysis,
         context,
         true,
-        [](std::size_t, int structureType) {
-            return structureType != LATTICE_OTHER;
+        [&](std::size_t atomIndex, int structureType) {
+            if(structureType == LATTICE_OTHER){
+                return false;
+            }
+            if(analysis.numberOfNeighbors(static_cast<int>(atomIndex)) == 0){
+                return false;
+            }
+            return true;
         }
     );
 }

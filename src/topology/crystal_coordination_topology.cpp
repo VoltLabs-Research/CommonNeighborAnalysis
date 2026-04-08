@@ -3,13 +3,15 @@
 #include <volt/analysis/cna_classifier.h>
 #include <volt/analysis/crystal_symmetry_utils.h>
 
+#include <stdexcept>
+
 namespace Volt{
 
 // Contains the known coordination structures.
-CoordinationStructure CoordinationStructures::_coordinationStructures[NUM_COORD_TYPES];
+std::vector<CoordinationStructure> CoordinationStructures::_coordinationStructures;
 
 // Contains the known lattice types.
-LatticeStructure CoordinationStructures::_latticeStructures[NUM_LATTICE_TYPES];
+std::vector<LatticeStructure> CoordinationStructures::_latticeStructures;
 
 CoordinationStructures::CoordinationStructures(
 	ParticleProperty* structureTypes,
@@ -35,7 +37,7 @@ double CoordinationStructures::determineLocalStructure(
         _identifyPlanarDefects,
         neighList,
         particleIndex,
-        _coordinationStructures,
+        _coordinationStructures.data(),
         match
     )){
         return 0.0;
@@ -123,241 +125,117 @@ void CoordinationStructures::postProcessDiamondNeighbors(
     }
 }
 
-void CoordinationStructures::initializeFCC(){
-	initializeCoordinationStructure(COORD_FCC, FCC_VECTORS, 12, [&](const Vector3& v1, const Vector3& v2){
-		return (v1 - v2).length() < (sqrt(0.5f) + 1.0) * 0.5;
-	}, [](int ni){ return 0; });
-
-	initializeLatticeStructure(LATTICE_FCC, FCC_VECTORS, 12, &_coordinationStructures[COORD_FCC]);
-    _latticeStructures[LATTICE_FCC].primitiveCell.column(0) = FCC_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_FCC].primitiveCell.column(1) = FCC_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_FCC].primitiveCell.column(2) = FCC_PRIMITIVE_CELL[2];
-}
-
-void CoordinationStructures::initializeHCP(){
-	initializeCoordinationStructure(COORD_HCP, HCP_VECTORS, 12, [&](const Vector3& v1, const Vector3& v2){
-		return (v1 - v2).length() < (sqrt(0.5) + 1.0) * 0.5;
-	}, [&](int ni){ return (HCP_VECTORS[ni].z() == 0) ? 1 : 0; });
-
-	initializeLatticeStructure(LATTICE_HCP, HCP_VECTORS, 18, &_coordinationStructures[COORD_HCP]);
-    _latticeStructures[LATTICE_HCP].primitiveCell.column(0) = HCP_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_HCP].primitiveCell.column(1) = HCP_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_HCP].primitiveCell.column(2) = HCP_PRIMITIVE_CELL[2];
-}
-
-void CoordinationStructures::initializeBCC(){
-	initializeCoordinationStructure(COORD_BCC, BCC_VECTORS, 14, [&](const Vector3& v1, const Vector3& v2){
-		return (v1 - v2).length() < (double(1) + sqrt(double(2))) * double(0.5);
-	}, [](int ni) { return (ni < 8) ? 0 : 1; });
-
-	initializeLatticeStructure(LATTICE_BCC, BCC_VECTORS, 14, &_coordinationStructures[COORD_BCC]);
-    _latticeStructures[LATTICE_BCC].primitiveCell.column(0) = BCC_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_BCC].primitiveCell.column(1) = BCC_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_BCC].primitiveCell.column(2) = BCC_PRIMITIVE_CELL[2];
-}
-
-void CoordinationStructures::initializeCubicDiamond(){
-    initializeDiamondStructure(COORD_CUBIC_DIAMOND, LATTICE_CUBIC_DIAMOND, DIAMOND_CUBIC_VECTORS, 16, 20);
-    
-    _latticeStructures[LATTICE_CUBIC_DIAMOND].primitiveCell.column(0) = CUBIC_DIAMOND_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_CUBIC_DIAMOND].primitiveCell.column(1) = CUBIC_DIAMOND_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_CUBIC_DIAMOND].primitiveCell.column(2) = CUBIC_DIAMOND_PRIMITIVE_CELL[2];
-}
-
-void CoordinationStructures::initializeHexagonalDiamond(){
-	initializeDiamondStructure(COORD_HEX_DIAMOND, LATTICE_HEX_DIAMOND, DIAMOND_HEX_VECTORS, 16, 32);
-    
-    _latticeStructures[LATTICE_HEX_DIAMOND].primitiveCell.column(0) = HEXAGONAL_DIAMOND_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_HEX_DIAMOND].primitiveCell.column(1) = HEXAGONAL_DIAMOND_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_HEX_DIAMOND].primitiveCell.column(2) = HEXAGONAL_DIAMOND_PRIMITIVE_CELL[2];
-}
-
-void CoordinationStructures::initializeSC(){
-    initializeCoordinationStructure(COORD_SC, SC_VECTORS, 6, [](const Vector3& v1, const Vector3& v2){
-        const double dot = v1.dot(v2);
-        // 90°
-        if(std::abs(dot) < EPSILON) return true;
-        // opposites
-        if((v1 + v2).squaredLength() < EPSILON) return true;
-        return false;
-    }, [](int /* ni */){ return 0; });
-
-    initializeLatticeStructure(LATTICE_SC, SC_VECTORS, 6, &_coordinationStructures[COORD_SC]);
-    _latticeStructures[LATTICE_SC].primitiveCell.column(0) = SC_PRIMITIVE_CELL[0];
-    _latticeStructures[LATTICE_SC].primitiveCell.column(1) = SC_PRIMITIVE_CELL[1];
-    _latticeStructures[LATTICE_SC].primitiveCell.column(2) = SC_PRIMITIVE_CELL[2];
-
-    // permutations in all 6 directions
-    _latticeStructures[LATTICE_SC].permutations.clear();
-    for(const auto& R : AnalysisSymmetryUtils::cubicSymmetryRotations()){
-        SymmetryPermutation sp;
-        sp.transformation = R;
-        for(int i = 0; i < 6; ++i){
-            const Vector3 vec = R * SC_VECTORS[i];
-            // match with index j such that R * vi == vj
-            for(int j = 0; j < 6; ++j){
-                if(vec.equals(SC_VECTORS[j])){
-                    sp.permutation[i] = j;
-                    break;
-                }
-            }
-        }
-
-        _latticeStructures[LATTICE_SC].permutations.push_back(sp);
-    }
-}   
-
-void CoordinationStructures::initializeOther(){
-    _coordinationStructures[COORD_OTHER].numNeighbors = 0;
-    _latticeStructures[LATTICE_OTHER].coordStructure = &_coordinationStructures[COORD_OTHER];
-    _latticeStructures[LATTICE_OTHER].primitiveCell.setZero();
-    _latticeStructures[LATTICE_OTHER].primitiveCellInverse.setZero();
-    _latticeStructures[LATTICE_OTHER].maxNeighbors = 0;
-}
-
-template <typename BondPredicate, typename SignatureFunction>
-void CoordinationStructures::initializeCoordinationStructure(
-	int coordType,
-	const Vector3* vectors,
-	int numNeighbors,
-	BondPredicate bondPred,
-	SignatureFunction sigFunc
+void populateCoordinationStructureFromTopology(
+    CoordinationStructure& coordStruct,
+    const CrystalTopologyEntry& entry
 ){
-	_coordinationStructures[coordType].numNeighbors = numNeighbors;
-	for(int ni1 = 0; ni1 < numNeighbors; ni1++){
-        _coordinationStructures[coordType].neighborArray.setNeighborBond(ni1, ni1, false);
-        for(int ni2 = ni1 + 1; ni2 < numNeighbors; ni2++){
-            bool bonded = bondPred(vectors[ni1], vectors[ni2]);
-            _coordinationStructures[coordType].neighborArray.setNeighborBond(ni1, ni2, bonded);
-        }
-        _coordinationStructures[coordType].cnaSignatures[ni1] = sigFunc(ni1);
+    coordStruct.numNeighbors = entry.coordinationNumber;
+    coordStruct.latticeVectors.assign(
+        entry.latticeVectors.begin(),
+        entry.latticeVectors.begin() + entry.coordinationNumber
+    );
+
+    for(int row = 0; row < entry.coordinationNumber; ++row){
+        coordStruct.neighborArray.neighborArray[static_cast<std::size_t>(row)] =
+            entry.neighborBondRows[static_cast<std::size_t>(row)];
+        coordStruct.cnaSignatures[row] = row < static_cast<int>(entry.cnaSignatureCodes.size())
+            ? entry.cnaSignatureCodes[static_cast<std::size_t>(row)]
+            : 0;
+        coordStruct.commonNeighbors[row][0] =
+            entry.commonNeighbors[static_cast<std::size_t>(row)][0];
+        coordStruct.commonNeighbors[row][1] =
+            entry.commonNeighbors[static_cast<std::size_t>(row)][1];
     }
-    
-    _coordinationStructures[coordType].latticeVectors.assign(vectors, vectors + numNeighbors);
 }
 
-void CoordinationStructures::initializeLatticeStructure(
-    int latticeType, 
-    const Vector3* vectors, 
-    int totalVectors,
+void populateLatticeStructureFromTopology(
+    LatticeStructure& latticeStruct,
+    const CrystalTopologyEntry& entry,
     CoordinationStructure* coordStruct
 ){
-    _latticeStructures[latticeType].latticeVectors.assign(vectors, vectors + totalVectors);
-    _latticeStructures[latticeType].coordStructure = coordStruct;
-    _latticeStructures[latticeType].maxNeighbors = coordStruct->numNeighbors;
+    latticeStruct.coordStructure = coordStruct;
+    latticeStruct.latticeVectors = entry.latticeVectors;
+    latticeStruct.primitiveCell = entry.primitiveCell;
+    latticeStruct.primitiveCellInverse = entry.primitiveCellInverse;
+    latticeStruct.maxNeighbors = coordStruct->numNeighbors;
+    latticeStruct.permutations.clear();
+    latticeStruct.permutations.reserve(entry.symmetries.size());
+    for(const auto& symmetry : entry.symmetries){
+        SymmetryPermutation permutation;
+        permutation.transformation = symmetry.transformation;
+        permutation.permutation.fill(-1);
+        for(std::size_t slot = 0; slot < symmetry.permutation.size() && slot < permutation.permutation.size(); ++slot){
+            permutation.permutation[slot] = symmetry.permutation[slot];
+        }
+        latticeStruct.permutations.push_back(std::move(permutation));
+    }
 }
 
-void CoordinationStructures::initializeDiamondStructure(int coordType, int latticeType, const Vector3* vectors, int numNeighbors, int totalVectors){
-    _coordinationStructures[coordType].numNeighbors = numNeighbors;
-    for(int ni1 = 0; ni1 < numNeighbors; ++ni1){
-        _coordinationStructures[coordType].neighborArray.setNeighborBond(ni1, ni1, false);
-        double cutoff = (ni1 < 4) ? (sqrt(3.0)*0.25+sqrt(0.5))/2.0 : (1.0+sqrt(0.5))/2.0;
-
-        for(int ni2 = 0; ni2 < 4; ++ni2){
-            if(ni1 < 4 && ni2 < 4) _coordinationStructures[coordType].neighborArray.setNeighborBond(ni1, ni2, false);
+void CoordinationStructures::initializeFromRegistry(){
+    std::size_t maxCoordinationType = static_cast<std::size_t>(COORD_OTHER);
+    std::size_t maxLatticeType = static_cast<std::size_t>(LATTICE_OTHER);
+    for(const CrystalTopologyEntry& entry : crystalTopologyRegistry().entries()){
+        if(entry.coordinationType > 0){
+            maxCoordinationType = std::max(maxCoordinationType, static_cast<std::size_t>(entry.coordinationType));
         }
-
-        for(int ni2 = std::max(ni1 + 1, 4); ni2 < numNeighbors; ++ni2){
-            bool bonded = (vectors[ni1] - vectors[ni2]).length() < cutoff;
-            _coordinationStructures[coordType].neighborArray.setNeighborBond(ni1, ni2, bonded);
-        }
-
-        if(coordType == COORD_HEX_DIAMOND){
-            _coordinationStructures[coordType].cnaSignatures[ni1] = (ni1 < 4) ? 0 : ((vectors[ni1].z() == 0) ? 2 : 1);
-        } else {
-            _coordinationStructures[coordType].cnaSignatures[ni1] = (ni1 < 4) ? 0 : 1;
+        if(entry.latticeType > 0){
+            maxLatticeType = std::max(maxLatticeType, static_cast<std::size_t>(entry.latticeType));
         }
     }
-    _coordinationStructures[coordType].latticeVectors.assign(vectors, vectors + numNeighbors);
-    initializeLatticeStructure(latticeType, vectors, totalVectors, &_coordinationStructures[coordType]);
+
+    if(_coordinationStructures.size() <= maxCoordinationType){
+        _coordinationStructures.resize(maxCoordinationType + 1);
+    }
+    if(_latticeStructures.size() <= maxLatticeType){
+        _latticeStructures.resize(maxLatticeType + 1);
+    }
+
+    for(const CrystalTopologyEntry& entry : crystalTopologyRegistry().entries()){
+        if(entry.coordinationType <= 0 || entry.latticeType <= 0){
+            continue;
+        }
+        populateCoordinationStructureFromTopology(
+            _coordinationStructures[static_cast<std::size_t>(entry.coordinationType)],
+            entry
+        );
+        populateLatticeStructureFromTopology(
+            _latticeStructures[static_cast<std::size_t>(entry.latticeType)],
+            entry,
+            &_coordinationStructures[static_cast<std::size_t>(entry.coordinationType)]
+        );
+    }
 }
 
-void CoordinationStructures::initializeCommonNeighbors(){
-	for(auto coordStruct = std::begin(_coordinationStructures); coordStruct != std::end(_coordinationStructures); ++coordStruct){
-		for(int neighborIndex = 0; neighborIndex < coordStruct->numNeighbors; neighborIndex++){
-			findCommonNeighborsForBond(*coordStruct, neighborIndex);
-		}
-	}
-}
+void CoordinationStructures::initializeOther(){
+    if(_coordinationStructures.empty()){
+        _coordinationStructures.resize(static_cast<std::size_t>(COORD_OTHER) + 1);
+    }
+    if(_latticeStructures.empty()){
+        _latticeStructures.resize(static_cast<std::size_t>(LATTICE_OTHER) + 1);
+    }
 
-void CoordinationStructures::findCommonNeighborsForBond(CoordinationStructure& coordStruct, int neighborIndex){
-	Matrix3 tm;
-	tm.column(0) = coordStruct.latticeVectors[neighborIndex];
-    bool found = false;
-    
-    coordStruct.commonNeighbors[neighborIndex][0] = -1;
-    coordStruct.commonNeighbors[neighborIndex][1] = -1;
-    
-    // Special case for SC (Simple Cubic) structure:
-    // SC has 6 neighbors along x, y, z. These neighbors don't share common bonds
-    // in the traditional CNA sense (each neighbor is perpendicular to 4 others and 
-    // opposite to 1). We need any 2 orthogonal vectors that form a complete basis 
-    // with the target neighbor vector.
-    if(coordStruct.numNeighbors == 6){
-        // SC_VECTORS ordering: {+x, -x, +y, -y, +z, -z} -> indices {0,1,2,3,4,5}
-        // XOR with 1 gives the opposite: 0↔1, 2↔3, 4↔5
-        for(int i1 = 0; i1 < 6 && !found; i1++){
-            // Skip the target neighbor and its opposite
-            if(i1 == neighborIndex || i1 == (neighborIndex ^ 1)) continue;
-            tm.column(1) = coordStruct.latticeVectors[i1];
-            
-            for(int i2 = i1 + 1; i2 < 6; i2++){
-                // Skip target, its opposite, and opposite of i1
-                if(i2 == neighborIndex || i2 == (neighborIndex ^ 1)) continue;
-                if(i2 == (i1 ^ 1)) continue;
-                tm.column(2) = coordStruct.latticeVectors[i2];
-                
-                if(std::abs(tm.determinant()) > EPSILON){
-                    coordStruct.commonNeighbors[neighborIndex][0] = i1;
-                    coordStruct.commonNeighbors[neighborIndex][1] = i2;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if(found) return;
-    }
-    
-    for(int i1 = 0; i1 < coordStruct.numNeighbors && !found; i1++){
-        if(!coordStruct.neighborArray.neighborBond(neighborIndex, i1)) continue;
-        tm.column(1) = coordStruct.latticeVectors[i1];
-        
-        for(int i2 = i1 + 1; i2 < coordStruct.numNeighbors; i2++){
-            if(!coordStruct.neighborArray.neighborBond(neighborIndex, i2)) continue;
-            tm.column(2) = coordStruct.latticeVectors[i2];
-            
-            if(std::abs(tm.determinant()) > EPSILON){
-                coordStruct.commonNeighbors[neighborIndex][0] = i1;
-                coordStruct.commonNeighbors[neighborIndex][1] = i2;
-                found = true;
-                break;
-            }
-        }
-    }
-    //assert(found);
+    _coordinationStructures[static_cast<std::size_t>(COORD_OTHER)].numNeighbors = 0;
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].coordStructure =
+        &_coordinationStructures[static_cast<std::size_t>(COORD_OTHER)];
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].primitiveCell.setZero();
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].primitiveCellInverse.setZero();
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].maxNeighbors = 0;
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].latticeVectors.clear();
+    _latticeStructures[static_cast<std::size_t>(LATTICE_OTHER)].permutations.clear();
 }
 
 void CoordinationStructures::initializeSymmetryInformation(){
-    for(auto latticeStruct = std::begin(_latticeStructures); 
+    for(auto latticeStruct = std::begin(_latticeStructures);
         latticeStruct != std::end(_latticeStructures); ++latticeStruct){
         
         if(latticeStruct->latticeVectors.empty()) continue;
         
         latticeStruct->primitiveCellInverse = latticeStruct->primitiveCell.inverse();
-        generateSymmetryPermutations(*latticeStruct);
+        if(latticeStruct->permutations.empty()){
+            throw std::runtime_error("Missing explicit symmetry_permutations in topology metadata.");
+        }
         calculateSymmetryProducts(*latticeStruct);
     }
-}
-
-void CoordinationStructures::generateSymmetryPermutations(LatticeStructure& latticeStruct){
-    const CoordinationStructure& coordStruct = *latticeStruct.coordStructure;
-
-    AnalysisSymmetryUtils::generateSymmetryPermutations(
-        coordStruct.latticeVectors,
-        coordStruct.numNeighbors,
-        latticeStruct.latticeVectors,
-        latticeStruct.permutations
-    );
 }
 
 void CoordinationStructures::findNonCoplanarVectors(const CoordinationStructure& coordStruct, int nindices[3], Matrix3& tm1){
@@ -370,13 +248,7 @@ void CoordinationStructures::calculateSymmetryProducts(LatticeStructure& lattice
 
 void CoordinationStructures::initializeStructures(){
 	initializeOther();
-	initializeFCC();
-	initializeHCP();
-	initializeBCC();
-    initializeSC();
-	initializeCubicDiamond();
-	initializeHexagonalDiamond();
-	initializeCommonNeighbors();
+    initializeFromRegistry();
 	initializeSymmetryInformation();
 }
 

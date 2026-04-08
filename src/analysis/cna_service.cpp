@@ -7,6 +7,7 @@
 #include <volt/analysis/structure_analysis.h>
 #include <volt/analysis/cna_cluster_input_adapter.h>
 #include <volt/analysis/cna_structure_analysis.h>
+#include <volt/analysis/reconstructed_state_canonicalizer.h>
 #include <volt/core/analysis_result.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/particle_property.h>
@@ -15,6 +16,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <map>
 #include <utility>
 
 namespace Volt{
@@ -24,53 +26,19 @@ using namespace Volt::Particles;
 namespace CnaServiceDetail{
 
 std::string structureTypeNameForExport(int structureType){
-    switch(static_cast<StructureType>(structureType)){
-        case StructureType::SC:
-            return "SC";
-        case StructureType::FCC:
-            return "FCC";
-        case StructureType::HCP:
-            return "HCP";
-        case StructureType::BCC:
-            return "BCC";
-        case StructureType::CUBIC_DIAMOND:
-            return "CUBIC_DIAMOND";
-        case StructureType::HEX_DIAMOND:
-            return "HEX_DIAMOND";
-        case StructureType::ICO:
-            return "ICO";
-        case StructureType::GRAPHENE:
-            return "GRAPHENE";
-        case StructureType::CUBIC_DIAMOND_FIRST_NEIGH:
-            return "CUBIC_DIAMOND_FIRST_NEIGH";
-        case StructureType::CUBIC_DIAMOND_SECOND_NEIGH:
-            return "CUBIC_DIAMOND_SECOND_NEIGH";
-        case StructureType::HEX_DIAMOND_FIRST_NEIGH:
-            return "HEX_DIAMOND_FIRST_NEIGH";
-        case StructureType::HEX_DIAMOND_SECOND_NEIGH:
-            return "HEX_DIAMOND_SECOND_NEIGH";
-        case StructureType::OTHER:
-        case StructureType::NUM_STRUCTURE_TYPES:
-        default:
-            return "OTHER";
-    }
+    return structureTypeName(structureType);
 }
 
 json buildMainListing(const std::vector<int>& structureTypes){
-    constexpr int K = static_cast<int>(StructureType::NUM_STRUCTURE_TYPES);
-    std::vector<int> counts(static_cast<size_t>(K), 0);
+    std::map<int, int> counts;
 
     for(int rawType : structureTypes){
-        const int safeType = (0 <= rawType && rawType < K)
-            ? rawType
-            : static_cast<int>(StructureType::OTHER);
-        counts[static_cast<size_t>(safeType)]++;
+        counts[rawType]++;
     }
 
     json listing = json::array();
-    for(int structureType = 0; structureType < K; ++structureType){
-        const int count = counts[static_cast<size_t>(structureType)];
-        if(count == 0){
+    for(const auto& [structureType, count] : counts){
+        if(count <= 0){
             continue;
         }
 
@@ -96,10 +64,7 @@ json buildPerAtomProperties(
     json perAtom = json::array();
 
     for(size_t atomIndex = 0; atomIndex < static_cast<size_t>(frame.natoms); ++atomIndex){
-        const int rawType = structureTypes[atomIndex];
-        const int structureType = (0 <= rawType && rawType < static_cast<int>(StructureType::NUM_STRUCTURE_TYPES))
-            ? rawType
-            : static_cast<int>(StructureType::OTHER);
+        const int structureType = structureTypes[atomIndex];
 
         json atom;
         atom["id"] = atomIndex < frame.ids.size()
@@ -127,36 +92,24 @@ json buildAtomsExport(
     const std::vector<int>& structureTypes,
     const ParticleProperty* clusterIds
 ){
-    constexpr int K = static_cast<int>(StructureType::NUM_STRUCTURE_TYPES);
-
-    std::vector<std::string> names(K);
-    for(int st = 0; st < K; ++st){
-        names[st] = structureTypeNameForExport(st);
-    }
-
-    std::vector<std::vector<size_t>> structureAtomIndices(K);
+    std::map<int, std::vector<size_t>> structureAtomIndices;
     for(size_t i = 0; i < static_cast<size_t>(frame.natoms); ++i){
-        const int raw = structureTypes[i];
-        const int st = (0 <= raw && raw < K) ? raw : static_cast<int>(StructureType::OTHER);
-        structureAtomIndices[static_cast<size_t>(st)].push_back(i);
+        structureAtomIndices[structureTypes[i]].push_back(i);
     }
 
     std::vector<int> structureOrder;
-    structureOrder.reserve(K);
-    for(int st = 0; st < K; ++st){
-        if(!structureAtomIndices[static_cast<size_t>(st)].empty()){
-            structureOrder.push_back(st);
-        }
+    structureOrder.reserve(structureAtomIndices.size());
+    for(const auto& [structureType, _] : structureAtomIndices){
+        structureOrder.push_back(structureType);
     }
-
     std::sort(structureOrder.begin(), structureOrder.end(), [&](int a, int b){
-        return names[a] < names[b];
+        return structureTypeNameForExport(a) < structureTypeNameForExport(b);
     });
 
     json atomsByStructure = json::object();
     for(int st : structureOrder){
         json atomsArray = json::array();
-        for(size_t atomIndex : structureAtomIndices[static_cast<size_t>(st)]){
+        for(size_t atomIndex : structureAtomIndices[st]){
             const bool hasPosition = atomIndex < frame.positions.size();
             const auto atomId = atomIndex < frame.ids.size()
                 ? frame.ids[atomIndex]
@@ -177,7 +130,7 @@ json buildAtomsExport(
                 });
             }
         }
-        atomsByStructure[names[st]] = atomsArray;
+        atomsByStructure[structureTypeNameForExport(st)] = atomsArray;
     }
 
     json exportWrapper;
@@ -205,6 +158,10 @@ json CommonNeighborAnalysisService::compute(
     const std::string& outputBase,
     const std::string& inputDumpPath
 ){
+    const std::string annotatedDumpPath = outputBase.empty()
+        ? inputDumpPath
+        : outputBase + "_annotated.dump";
+
     if(_inputCrystalStructure == LATTICE_SC){
         return AnalysisResult::failure("CNA does not support SC. Use PTM for this crystal.");
     }
@@ -223,10 +180,17 @@ json CommonNeighborAnalysisService::compute(
     try{
         StructureAnalysis analysis(context);
         identifyStructuresCNA(analysis);
+        ReconstructedStateCanonicalizer::canonicalizeConnectedStructureSymmetries(analysis, context);
+        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
         CNAClusterInputAdapter clusterInputAdapter;
         clusterInputAdapter.prepare(analysis, context);
         ClusterBuilder clusterBuilder(analysis, context);
         clusterBuilder.build(_dissolveSmallClusters);
+        normalizeReconstructedClusterGraphForExport(analysis, context);
+        if(context.inputCrystalType == LATTICE_FCC){
+            analysis.setNeighborLatticeVectorOverrides({}, 0);
+        }
+        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
 
         std::vector<int> atomStructureTypes(
             static_cast<size_t>(frame.natoms),
@@ -263,7 +227,7 @@ json CommonNeighborAnalysisService::compute(
         if(!AnalysisPipelineUtils::appendClusterOutputs(
             frame,
             outputBase,
-            inputDumpPath,
+            annotatedDumpPath,
             context,
             analysis,
             result,
