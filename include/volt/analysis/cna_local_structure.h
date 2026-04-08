@@ -9,9 +9,7 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <limits>
-#include <spdlog/spdlog.h>
 
 namespace Volt::CnaLocalStructureUtils{
 
@@ -32,14 +30,6 @@ inline int coordinationNumberFor(LatticeStructureType inputCrystalType){
 inline StructureType structureTypeFor(CoordinationStructureType coordinationType){
     const auto* topology = crystalTopologyByCoordinationType(static_cast<int>(coordinationType));
     return topology ? static_cast<StructureType>(topology->structureType) : StructureType::OTHER;
-}
-
-inline bool cnaLocalDebugEnabled(){
-    static const bool enabled = []() {
-        const char* value = std::getenv("VOLT_DEBUG_CNA_LOCAL");
-        return value != nullptr && value[0] != '\0' && value[0] != '0';
-    }();
-    return enabled;
 }
 
 inline bool orthonormalizeOrientation(const Matrix3& input, Matrix3& output){
@@ -489,15 +479,6 @@ inline bool determineLocalStructure(
             true,
             nullptr
         );
-        if(cnaLocalDebugEnabled() && outMatch.localCutoff > 0.0 && particleIndex < 3){
-            spdlog::info(
-                "CNA local debug: particle={} lattice_type={} accepted with collapsed-shell fallback coord_num={} local_cutoff={}",
-                particleIndex,
-                inputCrystalType,
-                outMatch.coordinationNumber,
-                outMatch.localCutoff
-            );
-        }
     }
     if(outMatch.localCutoff == 0.0){
         return false;
@@ -516,15 +497,6 @@ inline bool determineLocalStructure(
         identifyPlanarDefects
     );
     if(outMatch.coordinationType == COORD_OTHER){
-        if(cnaLocalDebugEnabled() && particleIndex < 3){
-            spdlog::info(
-                "CNA local debug: particle={} lattice_type={} failed coordination match coord_num={} local_cutoff={}",
-                particleIndex,
-                inputCrystalType,
-                outMatch.coordinationNumber,
-                outMatch.localCutoff
-            );
-        }
         return false;
     }
 
@@ -538,14 +510,6 @@ inline bool determineLocalStructure(
         coordinationStructures
     );
     if(!found){
-        if(cnaLocalDebugEnabled() && particleIndex < 3){
-            spdlog::info(
-                "CNA local debug: particle={} lattice_type={} failed neighbor permutation coordination_type={}",
-                particleIndex,
-                inputCrystalType,
-                outMatch.coordinationType
-            );
-        }
         return false;
     }
 

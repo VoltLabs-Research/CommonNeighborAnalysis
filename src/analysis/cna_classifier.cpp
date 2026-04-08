@@ -2,12 +2,9 @@
 #include <volt/structures/crystal_topology_registry.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
-#include <sstream>
 #include <vector>
-#include <spdlog/spdlog.h>
 
 namespace Volt{
 
@@ -16,28 +13,6 @@ struct CnaSignatureDescriptor{
     int neighborBondCount = 0;
     int maxChainLength = 0;
 };
-
-bool cnaClassifierDebugEnabled(){
-    static const bool enabled = []() {
-        const char* value = std::getenv("VOLT_DEBUG_CNA_LOCAL");
-        return value != nullptr && value[0] != '\0' && value[0] != '0';
-    }();
-    return enabled;
-}
-
-std::string descriptorsToString(const std::vector<CnaSignatureDescriptor>& descriptors){
-    std::ostringstream stream;
-    for(std::size_t index = 0; index < descriptors.size(); ++index){
-        if(index > 0){
-            stream << ',';
-        }
-        stream << '('
-               << descriptors[index].commonNeighborCount << ':'
-               << descriptors[index].neighborBondCount << ':'
-               << descriptors[index].maxChainLength << ')';
-    }
-    return stream.str();
-}
 
 bool operator==(const CnaSignatureDescriptor& lhs, const CnaSignatureDescriptor& rhs){
     return lhs.commonNeighborCount == rhs.commonNeighborCount &&
@@ -277,26 +252,8 @@ CoordinationStructureType CommonNeighborAnalysis::computeCoordinationType(
             continue;
         }
         if(tryMatchCandidateTopology(*candidate, actualDescriptors, cnaSignatures)){
-            if(cnaClassifierDebugEnabled()){
-                spdlog::info(
-                    "CNA local debug: lattice_type={} matched topology={} coordination_type={} descriptors={}",
-                    inputCrystalType,
-                    candidate->name,
-                    candidate->coordinationType,
-                    descriptorsToString(actualDescriptors)
-                );
-            }
             return static_cast<CoordinationStructureType>(candidate->coordinationType);
         }
-    }
-
-    if(cnaClassifierDebugEnabled()){
-        spdlog::info(
-            "CNA local debug: lattice_type={} no topology matched coordination={} descriptors={}",
-            inputCrystalType,
-            coordinationNumber,
-            descriptorsToString(actualDescriptors)
-        );
     }
 
     return COORD_OTHER;
