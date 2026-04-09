@@ -1,169 +1,11 @@
 #include <volt/analysis/cna_classifier.h>
-#include <volt/structures/crystal_topology_registry.h>
-
-#include <algorithm>
-#include <cassert>
-#include <cstring>
-#include <vector>
 
 namespace Volt{
-
-struct CnaSignatureDescriptor{
-    int commonNeighborCount = 0;
-    int neighborBondCount = 0;
-    int maxChainLength = 0;
-};
-
-bool operator==(const CnaSignatureDescriptor& lhs, const CnaSignatureDescriptor& rhs){
-    return lhs.commonNeighborCount == rhs.commonNeighborCount &&
-        lhs.neighborBondCount == rhs.neighborBondCount &&
-        lhs.maxChainLength == rhs.maxChainLength;
-}
-
-CnaSignatureDescriptor buildSignatureDescriptor(
-    const NeighborBondArray& neighborArray,
-    int neighborIndex,
-    int coordinationNumber
-){
-    CnaSignatureDescriptor descriptor;
-    unsigned int commonNeighbors = 0;
-    descriptor.commonNeighborCount = CommonNeighborAnalysis::findCommonNeighbors(
-        neighborArray,
-        neighborIndex,
-        commonNeighbors,
-        coordinationNumber
-    );
-
-    CNAPairBond neighborBonds[MAX_NEIGHBORS * MAX_NEIGHBORS];
-    descriptor.neighborBondCount = CommonNeighborAnalysis::findNeighborBonds(
-        neighborArray,
-        commonNeighbors,
-        coordinationNumber,
-        neighborBonds
-    );
-    descriptor.maxChainLength = CommonNeighborAnalysis::calcMaxChainLength(
-        neighborBonds,
-        descriptor.neighborBondCount
-    );
-    return descriptor;
-}
-
-NeighborBondArray makeExpectedNeighborArray(const CrystalTopologyEntry& topology){
-    NeighborBondArray neighborArray;
-    for(int index = 0; index < topology.coordinationNumber; ++index){
-        neighborArray.neighborArray[index] = topology.neighborBondRows[static_cast<std::size_t>(index)];
-    }
-    return neighborArray;
-}
-
-bool tryMapDescriptorCode(
-    const std::vector<std::pair<CnaSignatureDescriptor, int>>& descriptorToCode,
-    const CnaSignatureDescriptor& descriptor,
-    int& code
-){
-    for(const auto& pair : descriptorToCode){
-        if(pair.first == descriptor){
-            code = pair.second;
-            return true;
-        }
-    }
-    return false;
-}
-
-bool tryMatchCandidateTopology(
-    const CrystalTopologyEntry& topology,
-    const std::vector<CnaSignatureDescriptor>& actualDescriptors,
-    int* cnaSignatures
-){
-    if(static_cast<int>(topology.cnaSignatureCodes.size()) != topology.coordinationNumber){
-        return false;
-    }
-
-    const NeighborBondArray expectedNeighborArray = makeExpectedNeighborArray(topology);
-    std::vector<std::pair<CnaSignatureDescriptor, int>> descriptorToCode;
-    descriptorToCode.reserve(static_cast<std::size_t>(topology.coordinationNumber));
-
-    for(int index = 0; index < topology.coordinationNumber; ++index){
-        const CnaSignatureDescriptor expectedDescriptor = buildSignatureDescriptor(
-            expectedNeighborArray,
-            index,
-            topology.coordinationNumber
-        );
-        const int expectedCode = topology.cnaSignatureCodes[static_cast<std::size_t>(index)];
-
-        bool found = false;
-        for(const auto& pair : descriptorToCode){
-            if(pair.first == expectedDescriptor){
-                if(pair.second != expectedCode){
-                    return false;
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if(!found){
-            descriptorToCode.emplace_back(expectedDescriptor, expectedCode);
-        }
-    }
-
-    std::vector<int> actualCodes(actualDescriptors.size(), -1);
-    for(std::size_t index = 0; index < actualDescriptors.size(); ++index){
-        if(!tryMapDescriptorCode(descriptorToCode, actualDescriptors[index], actualCodes[index])){
-            return false;
-        }
-    }
-
-    std::vector<int> sortedActualCodes = actualCodes;
-    std::vector<int> expectedCodes = topology.cnaSignatureCodes;
-    std::sort(sortedActualCodes.begin(), sortedActualCodes.end());
-    std::sort(expectedCodes.begin(), expectedCodes.end());
-    if(sortedActualCodes != expectedCodes){
-        return false;
-    }
-
-    std::copy(actualCodes.begin(), actualCodes.end(), cnaSignatures);
-    return true;
-}
-
-std::vector<const CrystalTopologyEntry*> candidateTopologiesForCna(
-    LatticeStructureType inputCrystalType,
-    bool identifyPlanarDefects
-){
-    std::vector<const CrystalTopologyEntry*> candidates;
-    const auto* inputTopology = crystalTopologyByLatticeType(static_cast<int>(inputCrystalType));
-    if(!inputTopology){
-        return candidates;
-    }
-
-    candidates.push_back(inputTopology);
-    if(!identifyPlanarDefects){
-        return candidates;
-    }
-
-    for(const auto& entry : crystalTopologyRegistry().entries()){
-        if(entry.coordinationType <= 0){
-            continue;
-        }
-        if(entry.coordinationNumber != inputTopology->coordinationNumber){
-            continue;
-        }
-        if(entry.coordinationType == inputTopology->coordinationType){
-            continue;
-        }
-        if(static_cast<int>(entry.cnaSignatureCodes.size()) != entry.coordinationNumber){
-            continue;
-        }
-        candidates.push_back(&entry);
-    }
-
-    return candidates;
-}
 
 int CommonNeighborAnalysis::findCommonNeighbors(
     const NeighborBondArray& neighborArray,
     int neighborIndex,
-    unsigned int &commonNeighbors,
+    unsigned int& commonNeighbors,
     int
 ){
     commonNeighbors = neighborArray.neighborArray[neighborIndex];
@@ -230,33 +72,134 @@ CoordinationStructureType CommonNeighborAnalysis::computeCoordinationType(
     LatticeStructureType inputCrystalType,
     bool identifyPlanarDefects
 ){
-    const std::vector<const CrystalTopologyEntry*> candidates = candidateTopologiesForCna(
-        inputCrystalType,
-        identifyPlanarDefects
-    );
-    if(candidates.empty()){
-        return COORD_OTHER;
-    }
+    CoordinationStructureType coordinationType = COORD_OTHER;
 
-    std::vector<CnaSignatureDescriptor> actualDescriptors(static_cast<std::size_t>(coordinationNumber));
-    for(int neighborIndex = 0; neighborIndex < coordinationNumber; ++neighborIndex){
-        actualDescriptors[static_cast<std::size_t>(neighborIndex)] = buildSignatureDescriptor(
-            neighborArray,
-            neighborIndex,
-            coordinationNumber
-        );
-    }
+    switch(inputCrystalType){
+        case LATTICE_FCC:
+        case LATTICE_HCP: {
+            int n421 = 0;
+            int n422 = 0;
+            for(int neighborIndex = 0; neighborIndex < coordinationNumber; neighborIndex++){
+                unsigned int commonNeighbors;
+                int numCommonNeighbors = findCommonNeighbors(neighborArray, neighborIndex, commonNeighbors, coordinationNumber);
+                if(numCommonNeighbors != 4){
+                    break;
+                }
 
-    for(const auto* candidate : candidates){
-        if(!candidate || candidate->coordinationNumber != coordinationNumber){
-            continue;
+                CNAPairBond neighborBonds[MAX_NEIGHBORS * MAX_NEIGHBORS];
+                int numNeighborBonds = findNeighborBonds(neighborArray, commonNeighbors, coordinationNumber, neighborBonds);
+                if(numNeighborBonds != 2){
+                    break;
+                }
+
+                int maxChainLength = calcMaxChainLength(neighborBonds, numNeighborBonds);
+
+                if(maxChainLength == 1){
+                    n421++;
+                    cnaSignatures[neighborIndex] = 0;
+                }else if(maxChainLength == 2){
+                    n422++;
+                    cnaSignatures[neighborIndex] = 1;
+                }else{
+                    break;
+                }
+            }
+
+            if(n421 == 12 && (identifyPlanarDefects || inputCrystalType == LATTICE_FCC)){
+                coordinationType = COORD_FCC;
+            }else if(n421 == 6 && n422 == 6 && (identifyPlanarDefects || inputCrystalType == LATTICE_HCP)){
+                coordinationType = COORD_HCP;
+            }
+            break;
         }
-        if(tryMatchCandidateTopology(*candidate, actualDescriptors, cnaSignatures)){
-            return static_cast<CoordinationStructureType>(candidate->coordinationType);
+
+        case LATTICE_BCC: {
+            int n444 = 0;
+            int n666 = 0;
+            for(int neighborIndex = 0; neighborIndex < coordinationNumber; neighborIndex++){
+                unsigned int commonNeighbors;
+                int numCommonNeighbors = findCommonNeighbors(neighborArray, neighborIndex, commonNeighbors, 14);
+                if(numCommonNeighbors != 4 && numCommonNeighbors != 6){
+                    break;
+                }
+
+                CNAPairBond neighborBonds[MAX_NEIGHBORS * MAX_NEIGHBORS];
+                int numNeighborBonds = findNeighborBonds(neighborArray, commonNeighbors, 14, neighborBonds);
+                if(numNeighborBonds != 4 && numNeighborBonds != 6){
+                    break;
+                }
+
+                int maxChainLength = calcMaxChainLength(neighborBonds, numNeighborBonds);
+
+                if(numCommonNeighbors == 4 && numNeighborBonds == 4 && maxChainLength == 4){
+                    n444++;
+                    cnaSignatures[neighborIndex] = 1;
+                }else if(numCommonNeighbors == 6 && numNeighborBonds == 6 && maxChainLength == 6){
+                    n666++;
+                    cnaSignatures[neighborIndex] = 0;
+                }else{
+                    break;
+                }
+            }
+
+            if(n666 == 8 && n444 == 6){
+                coordinationType = COORD_BCC;
+            }
+            break;
         }
+
+        case LATTICE_CUBIC_DIAMOND:
+        case LATTICE_HEX_DIAMOND: {
+            for(int neighborIndex = 0; neighborIndex < 4; neighborIndex++){
+                cnaSignatures[neighborIndex] = 0;
+                unsigned int commonNeighbors;
+                int numCommonNeighbors = findCommonNeighbors(neighborArray, neighborIndex, commonNeighbors, coordinationNumber);
+                if(numCommonNeighbors != 3){
+                    return COORD_OTHER;
+                }
+            }
+
+            int n543 = 0;
+            int n544 = 0;
+            for(int neighborIndex = 4; neighborIndex < coordinationNumber; neighborIndex++){
+                unsigned int commonNeighbors;
+                int numCommonNeighbors = findCommonNeighbors(neighborArray, neighborIndex, commonNeighbors, coordinationNumber);
+                if(numCommonNeighbors != 5){
+                    break;
+                }
+
+                CNAPairBond neighborBonds[MAX_NEIGHBORS * MAX_NEIGHBORS];
+                int numNeighborBonds = findNeighborBonds(neighborArray, commonNeighbors, coordinationNumber, neighborBonds);
+                if(numNeighborBonds != 4){
+                    break;
+                }
+
+                int maxChainLength = calcMaxChainLength(neighborBonds, numNeighborBonds);
+
+                if(maxChainLength == 3){
+                    n543++;
+                    cnaSignatures[neighborIndex] = 1;
+                }else if(maxChainLength == 4){
+                    n544++;
+                    cnaSignatures[neighborIndex] = 2;
+                }else{
+                    break;
+                }
+            }
+
+            if(n543 == 12 && (identifyPlanarDefects || inputCrystalType == LATTICE_CUBIC_DIAMOND)){
+                coordinationType = COORD_CUBIC_DIAMOND;
+            }else if(n543 == 6 && n544 == 6 && (identifyPlanarDefects || inputCrystalType == LATTICE_HEX_DIAMOND)){
+                coordinationType = COORD_HEX_DIAMOND;
+            }
+            break;
+        }
+
+        default:
+            break;
     }
 
-    return COORD_OTHER;
+    return coordinationType;
 }
 
 int CommonNeighborAnalysis::findNeighborBonds(
@@ -297,7 +240,7 @@ int CommonNeighborAnalysis::getAdjacentBonds(
         if(atom & bondsToProcess[b]){
             ++adjacentBonds;
             atomsToProcess |= bondsToProcess[b] & (~atomsProcessed);
-            memmove(&bondsToProcess[b], &bondsToProcess[b+1], sizeof(CNAPairBond) * (numBonds - b - 1));
+            memmove(&bondsToProcess[b], &bondsToProcess[b + 1], sizeof(CNAPairBond) * (numBonds - b - 1));
             --numBonds;
         }
     }

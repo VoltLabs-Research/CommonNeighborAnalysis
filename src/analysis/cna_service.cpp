@@ -7,7 +7,6 @@
 #include <volt/analysis/structure_analysis.h>
 #include <volt/analysis/cna_cluster_input_adapter.h>
 #include <volt/analysis/cna_structure_analysis.h>
-#include <volt/analysis/reconstructed_state_canonicalizer.h>
 #include <volt/core/analysis_result.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/particle_property.h>
@@ -180,17 +179,10 @@ json CommonNeighborAnalysisService::compute(
     try{
         StructureAnalysis analysis(context);
         identifyStructuresCNA(analysis);
-        ReconstructedStateCanonicalizer::canonicalizeConnectedStructureSymmetries(analysis, context);
-        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
         CNAClusterInputAdapter clusterInputAdapter;
         clusterInputAdapter.prepare(analysis, context);
         ClusterBuilder clusterBuilder(analysis, context);
         clusterBuilder.build(_dissolveSmallClusters);
-        normalizeReconstructedClusterGraphForExport(analysis, context);
-        if(context.inputCrystalType == LATTICE_FCC){
-            analysis.setNeighborLatticeVectorOverrides({}, 0);
-        }
-        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
 
         std::vector<int> atomStructureTypes(
             static_cast<size_t>(frame.natoms),

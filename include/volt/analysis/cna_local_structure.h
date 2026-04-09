@@ -1,17 +1,29 @@
 #pragma once
 
-#include <volt/analysis/crystal_topology_library.h>
 #include <volt/analysis/cna_classifier.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/math/quaternion.h>
-#include <volt/structures/crystal_topology_registry.h>
 #include <volt/topology/crystal_coordination_pattern.h>
 
-#include <algorithm>
 #include <array>
-#include <limits>
+#include <cmath>
 
 namespace Volt::CnaLocalStructureUtils{
+
+enum class NativeCnaLocalEnvironmentConstruction{
+    None = 0,
+    Direct,
+    FirstShellExpansion
+};
+
+struct NativeCnaLocalEnvironmentDescriptor{
+    NativeCnaLocalEnvironmentConstruction construction = NativeCnaLocalEnvironmentConstruction::None;
+    int expansionSeedCount = 0;
+    int referenceNeighborOffset = 0;
+    int referenceNeighborCount = 0;
+    double cutoffMultiplier = 0.0;
+    int bondStartIndex = 0;
+    int extraNeighborRejectIndex = -1;
+};
 
 struct LocalStructureMatch{
     double localCutoff = 0.0;
@@ -20,288 +32,125 @@ struct LocalStructureMatch{
     StructureType structureType = StructureType::OTHER;
     std::array<int, MAX_NEIGHBORS> neighborIndices{};
     std::array<int, MAX_NEIGHBORS> neighborMapping{};
+    std::array<Vector3, MAX_NEIGHBORS> neighborVectors{};
 };
 
+inline NativeCnaLocalEnvironmentDescriptor nativeCnaLocalEnvironmentFor(
+    LatticeStructureType inputCrystalType
+){
+    switch(inputCrystalType){
+        case LATTICE_FCC:
+        case LATTICE_HCP:
+            return {
+                NativeCnaLocalEnvironmentConstruction::Direct,
+                0,
+                0,
+                12,
+                1.2071067811865475,
+                0,
+                12
+            };
+        case LATTICE_BCC:
+            return {
+                NativeCnaLocalEnvironmentConstruction::Direct,
+                0,
+                0,
+                8,
+                1.393846850117352,
+                0,
+                14
+            };
+        case LATTICE_CUBIC_DIAMOND:
+        case LATTICE_HEX_DIAMOND:
+            return {
+                NativeCnaLocalEnvironmentConstruction::FirstShellExpansion,
+                4,
+                4,
+                12,
+                1.2071068,
+                4,
+                -1
+            };
+        default:
+            return {};
+    }
+}
+
 inline int coordinationNumberFor(LatticeStructureType inputCrystalType){
-    const auto* topology = crystalTopologyByLatticeType(static_cast<int>(inputCrystalType));
-    return topology ? topology->coordinationNumber : 0;
+    switch(inputCrystalType){
+        case LATTICE_FCC:
+        case LATTICE_HCP:
+            return 12;
+        case LATTICE_BCC:
+            return 14;
+        case LATTICE_CUBIC_DIAMOND:
+        case LATTICE_HEX_DIAMOND:
+            return 16;
+        case LATTICE_SC:
+            return 6;
+        default:
+            return 0;
+    }
 }
 
 inline StructureType structureTypeFor(CoordinationStructureType coordinationType){
-    const auto* topology = crystalTopologyByCoordinationType(static_cast<int>(coordinationType));
-    return topology ? static_cast<StructureType>(topology->structureType) : StructureType::OTHER;
-}
-
-inline bool orthonormalizeOrientation(const Matrix3& input, Matrix3& output){
-    Vector3 c0 = input.column(0);
-    Vector3 c1 = input.column(1);
-    Vector3 c2 = input.column(2);
-
-    const double l0 = c0.length();
-    if(l0 <= EPSILON){
-        return false;
+    switch(coordinationType){
+        case COORD_CUBIC_DIAMOND:
+            return StructureType::CUBIC_DIAMOND;
+        case COORD_HEX_DIAMOND:
+            return StructureType::HEX_DIAMOND;
+        case COORD_FCC:
+            return StructureType::FCC;
+        case COORD_HCP:
+            return StructureType::HCP;
+        case COORD_BCC:
+            return StructureType::BCC;
+        case COORD_SC:
+            return StructureType::SC;
+        default:
+            return StructureType::OTHER;
     }
-    c0 /= l0;
-
-    c1 -= c0 * c0.dot(c1);
-    const double l1 = c1.length();
-    if(l1 <= EPSILON){
-        return false;
-    }
-    c1 /= l1;
-
-    c2 -= c0 * c0.dot(c2);
-    c2 -= c1 * c1.dot(c2);
-    const double l2 = c2.length();
-    if(l2 <= EPSILON){
-        return false;
-    }
-    c2 /= l2;
-
-    output = Matrix3(c0, c1, c2);
-    if(output.determinant() < 0.0){
-        output.column(2) = -output.column(2);
-    }
-    return true;
-}
-
-inline bool topologySupportsOrientationInversion(
-    const SharedCrystalTopology& topology,
-    std::array<int, MAX_NEIGHBORS>& outInversePermutation
-){
-    outInversePermutation.fill(-1);
-    for(int slot = 0; slot < topology.coordinationNumber; ++slot){
-        const Vector3& vector = topology.latticeVectors[static_cast<std::size_t>(slot)];
-        for(int candidateSlot = 0; candidateSlot < topology.coordinationNumber; ++candidateSlot){
-            if((topology.latticeVectors[static_cast<std::size_t>(candidateSlot)] + vector).isZero(EPSILON)){
-                outInversePermutation[static_cast<std::size_t>(slot)] = candidateSlot;
-                break;
-            }
-        }
-        if(outInversePermutation[static_cast<std::size_t>(slot)] < 0){
-            return false;
-        }
-    }
-    return true;
-}
-
-inline bool computeMatchedOrientation(
-    const SharedCrystalTopology& topology,
-    const Vector3* neighborVectors,
-    const int* neighborMapping,
-    Matrix3& outRawOrientation,
-    Matrix3& outOrientation
-){
-    Matrix3 orientationV = Matrix3::Zero();
-    Matrix3 orientationW = Matrix3::Zero();
-    int vectorCount = 0;
-
-    for(int canonicalSlot = 0; canonicalSlot < topology.coordinationNumber; ++canonicalSlot){
-        const int localSlot = neighborMapping[canonicalSlot];
-        if(localSlot < 0 || localSlot >= topology.coordinationNumber){
-            return false;
-        }
-
-        const Vector3& idealVector = topology.latticeVectors[static_cast<std::size_t>(canonicalSlot)];
-        const Vector3& spatialVector = neighborVectors[localSlot];
-        for(int row = 0; row < 3; ++row){
-            for(int column = 0; column < 3; ++column){
-                orientationV(row, column) += idealVector[column] * idealVector[row];
-                orientationW(row, column) += idealVector[column] * spatialVector[row];
-            }
-        }
-        ++vectorCount;
-    }
-
-    if(vectorCount < 3){
-        return false;
-    }
-
-    Matrix3 orientationVInverse;
-    if(!orientationV.inverse(orientationVInverse)){
-        return false;
-    }
-
-    outRawOrientation = Matrix3(orientationW * orientationVInverse);
-    return orthonormalizeOrientation(outRawOrientation, outOrientation);
-}
-
-inline bool computeMatchedOrientation(
-    const SharedCrystalTopology& topology,
-    const Vector3* neighborVectors,
-    const int* neighborMapping,
-    Matrix3& outOrientation
-){
-    Matrix3 rawOrientation;
-    return computeMatchedOrientation(
-        topology,
-        neighborVectors,
-        neighborMapping,
-        rawOrientation,
-        outOrientation
-    );
-}
-
-inline double identityDeviation(const Matrix3& matrix){
-    double error = 0.0;
-    for(int row = 0; row < 3; ++row){
-        for(int column = 0; column < 3; ++column){
-            const double expected = row == column ? 1.0 : 0.0;
-            const double delta = matrix(row, column) - expected;
-            error += delta * delta;
-        }
-    }
-    return error;
-}
-
-inline bool canonicalizeNeighborMapping(
-    StructureType structureType,
-    const Vector3* neighborVectors,
-    int coordinationNumber,
-    int* neighborMapping
-){
-    const SharedCrystalTopology* topology = sharedCrystalTopology(static_cast<int>(structureType));
-    if(!topology || coordinationNumber != topology->coordinationNumber){
-        return true;
-    }
-
-    auto scoreOrientation = [](const Matrix3& orientation) {
-        Quaternion q(orientation);
-        q.normalize();
-        if(q.w() < 0.0){
-            q = -q;
-        }
-        return std::array<double, 4>{q.w(), q.x(), q.y(), q.z()};
-    };
-
-    auto isBetterScore = [](const std::array<double, 4>& lhs, const std::array<double, 4>& rhs) {
-        constexpr double tolerance = 1e-12;
-        for(std::size_t index = 0; index < lhs.size(); ++index){
-            if(lhs[index] > rhs[index] + tolerance){
-                return true;
-            }
-            if(lhs[index] + tolerance < rhs[index]){
-                return false;
-            }
-        }
-        return false;
-    };
-
-    std::array<int, MAX_NEIGHBORS> baseMapping{};
-    std::copy_n(neighborMapping, coordinationNumber, baseMapping.begin());
-
-    std::array<int, MAX_NEIGHBORS> inversePermutation{};
-    const bool allowInversionEquivalent = topologySupportsOrientationInversion(
-        *topology,
-        inversePermutation
-    );
-
-    std::array<int, MAX_NEIGHBORS> bestMapping{};
-    std::array<double, 4> bestScore{};
-    bool bestValid = false;
-    bool bestProper = false;
-
-    auto tryCandidate = [&](const std::array<int, MAX_NEIGHBORS>& canonicalPermutation) {
-        std::array<int, MAX_NEIGHBORS> candidateMapping{};
-        for(int canonicalSlot = 0; canonicalSlot < coordinationNumber; ++canonicalSlot){
-            const int mappedCanonicalSlot = canonicalPermutation[static_cast<std::size_t>(canonicalSlot)];
-            if(mappedCanonicalSlot < 0 || mappedCanonicalSlot >= coordinationNumber){
-                return;
-            }
-            candidateMapping[static_cast<std::size_t>(canonicalSlot)] =
-                baseMapping[static_cast<std::size_t>(mappedCanonicalSlot)];
-        }
-
-        Matrix3 rawOrientation;
-        Matrix3 orientation;
-        if(!computeMatchedOrientation(
-            *topology,
-            neighborVectors,
-            candidateMapping.data(),
-            rawOrientation,
-            orientation
-        )){
-            return;
-        }
-
-        const bool properOrientation = rawOrientation.determinant() >= 0.0;
-        const std::array<double, 4> score = scoreOrientation(orientation);
-        if(!bestValid ||
-           (properOrientation && !bestProper) ||
-           (properOrientation == bestProper && isBetterScore(score, bestScore))){
-            bestMapping = candidateMapping;
-            bestScore = score;
-            bestValid = true;
-            bestProper = properOrientation;
-        }
-    };
-
-    for(const auto& symmetry : topology->symmetries){
-        tryCandidate(symmetry.permutation);
-    }
-
-    if(allowInversionEquivalent){
-        for(const auto& symmetry : topology->symmetries){
-            std::array<int, MAX_NEIGHBORS> invertedPermutation{};
-            invertedPermutation.fill(-1);
-            for(int canonicalSlot = 0; canonicalSlot < coordinationNumber; ++canonicalSlot){
-                const int rotatedSlot = symmetry.permutation[static_cast<std::size_t>(canonicalSlot)];
-                if(rotatedSlot < 0 || rotatedSlot >= coordinationNumber){
-                    continue;
-                }
-                invertedPermutation[static_cast<std::size_t>(canonicalSlot)] =
-                    inversePermutation[static_cast<std::size_t>(rotatedSlot)];
-            }
-            tryCandidate(invertedPermutation);
-        }
-    }
-
-    if(!bestValid){
-        return false;
-    }
-
-    std::copy_n(bestMapping.begin(), coordinationNumber, neighborMapping);
-    return true;
 }
 
 inline bool buildExpandedNeighborShell(
-    const CrystalTopologyEntry& topology,
+    const NativeCnaLocalEnvironmentDescriptor& descriptor,
     const NearestNeighborFinder& neighList,
     const NearestNeighborFinder::Query<MAX_NEIGHBORS>& neighQuery,
     int particleIndex,
+    int coordinationNumber,
     int* neighborIndices,
     Vector3* neighborVectors,
     NeighborBondArray& neighborArray
 ){
-    const int seedCount = topology.cnaLocalEnvironment.expansionSeedCount;
-    if(seedCount <= 0 || topology.coordinationNumber <= seedCount){
+    if(descriptor.expansionSeedCount <= 0 || coordinationNumber <= descriptor.expansionSeedCount){
         return false;
     }
 
-    const int neighborsPerSeed = (topology.coordinationNumber - seedCount) / seedCount;
-    if(seedCount * neighborsPerSeed + seedCount != topology.coordinationNumber){
+    const int neighborsPerSeed =
+        (coordinationNumber - descriptor.expansionSeedCount) / descriptor.expansionSeedCount;
+    if(descriptor.expansionSeedCount * neighborsPerSeed + descriptor.expansionSeedCount != coordinationNumber){
         return false;
     }
 
-    int outputIndex = seedCount;
-    for(int seedIndex = 0; seedIndex < seedCount; ++seedIndex){
+    int outputIndex = descriptor.expansionSeedCount;
+    for(int seedIndex = 0; seedIndex < descriptor.expansionSeedCount; ++seedIndex){
         const Vector3& seedVector = neighQuery.results()[seedIndex].delta;
         neighborVectors[seedIndex] = seedVector;
         neighborIndices[seedIndex] = neighQuery.results()[seedIndex].index;
 
         NearestNeighborFinder::Query<MAX_NEIGHBORS> seedQuery(neighList);
         seedQuery.findNeighbors(neighList.particlePos(neighborIndices[seedIndex]));
-        if(static_cast<int>(seedQuery.results().size()) < seedCount){
+        if(static_cast<int>(seedQuery.results().size()) < descriptor.expansionSeedCount){
             return false;
         }
 
         int produced = 0;
-        for(int neighborIndex = 0; neighborIndex < seedCount; ++neighborIndex){
+        for(int neighborIndex = 0; neighborIndex < descriptor.expansionSeedCount; ++neighborIndex){
             Vector3 vector = seedVector + seedQuery.results()[neighborIndex].delta;
             if(seedQuery.results()[neighborIndex].index == particleIndex && vector.isZero()){
                 continue;
             }
-            if(outputIndex == topology.coordinationNumber){
+            if(outputIndex == coordinationNumber){
                 return false;
             }
 
@@ -317,7 +166,7 @@ inline bool buildExpandedNeighborShell(
         }
     }
 
-    return outputIndex == topology.coordinationNumber;
+    return outputIndex == coordinationNumber;
 }
 
 inline double computeLocalCutoff(
@@ -337,20 +186,15 @@ inline double computeLocalCutoff(
         *outRejectedByExtraNeighbor = false;
     }
 
-    const auto* topology = crystalTopologyByLatticeType(static_cast<int>(inputCrystalType));
-    if(!topology){
+    const NativeCnaLocalEnvironmentDescriptor descriptor = nativeCnaLocalEnvironmentFor(inputCrystalType);
+    if(descriptor.construction == NativeCnaLocalEnvironmentConstruction::None ||
+       descriptor.referenceNeighborCount <= 0 ||
+       descriptor.cutoffMultiplier <= 0.0){
         return 0.0;
     }
 
-    const auto& localEnvironment = topology->cnaLocalEnvironment;
-    if(localEnvironment.construction == CnaLocalEnvironmentConstruction::None ||
-       localEnvironment.referenceNeighborCount <= 0 ||
-       localEnvironment.cutoffMultiplier <= 0.0){
-        return 0.0;
-    }
-
-    if(localEnvironment.construction == CnaLocalEnvironmentConstruction::Direct){
-        if(numNeighbors < coordinationNumber || numNeighbors < localEnvironment.referenceNeighborCount){
+    if(descriptor.construction == NativeCnaLocalEnvironmentConstruction::Direct){
+        if(numNeighbors < coordinationNumber || numNeighbors < descriptor.referenceNeighborCount){
             return 0.0;
         }
 
@@ -358,16 +202,16 @@ inline double computeLocalCutoff(
             neighborIndices[neighborIndex] = neighQuery.results()[neighborIndex].index;
             neighborVectors[neighborIndex] = neighQuery.results()[neighborIndex].delta;
         }
-    }else if(localEnvironment.construction == CnaLocalEnvironmentConstruction::FirstShellExpansion){
-        if(numNeighbors < localEnvironment.expansionSeedCount){
+    }else if(descriptor.construction == NativeCnaLocalEnvironmentConstruction::FirstShellExpansion){
+        if(numNeighbors < descriptor.expansionSeedCount){
             return 0.0;
         }
-
         if(!buildExpandedNeighborShell(
-            *topology,
+            descriptor,
             neighList,
             neighQuery,
             particleIndex,
+            coordinationNumber,
             neighborIndices,
             neighborVectors,
             neighborArray
@@ -378,8 +222,8 @@ inline double computeLocalCutoff(
         return 0.0;
     }
 
-    const int referenceBegin = localEnvironment.referenceNeighborOffset;
-    const int referenceEnd = referenceBegin + localEnvironment.referenceNeighborCount;
+    const int referenceBegin = descriptor.referenceNeighborOffset;
+    const int referenceEnd = referenceBegin + descriptor.referenceNeighborCount;
     if(referenceBegin < 0 || referenceEnd > coordinationNumber){
         return 0.0;
     }
@@ -388,14 +232,14 @@ inline double computeLocalCutoff(
     for(int neighborIndex = referenceBegin; neighborIndex < referenceEnd; ++neighborIndex){
         localScaling += neighborVectors[neighborIndex].length();
     }
-    localScaling /= static_cast<double>(localEnvironment.referenceNeighborCount);
+    localScaling /= static_cast<double>(descriptor.referenceNeighborCount);
 
-    const double localCutoff = localScaling * localEnvironment.cutoffMultiplier;
+    const double localCutoff = localScaling * descriptor.cutoffMultiplier;
     const double localCutoffSquared = localCutoff * localCutoff;
 
-    if(localEnvironment.extraNeighborRejectIndex >= 0 &&
-       numNeighbors > localEnvironment.extraNeighborRejectIndex &&
-       neighQuery.results()[localEnvironment.extraNeighborRejectIndex].distanceSq <= localCutoffSquared){
+    if(descriptor.extraNeighborRejectIndex >= 0 &&
+       numNeighbors > descriptor.extraNeighborRejectIndex &&
+       neighQuery.results()[descriptor.extraNeighborRejectIndex].distanceSq <= localCutoffSquared){
         if(outRejectedByExtraNeighbor){
             *outRejectedByExtraNeighbor = true;
         }
@@ -404,7 +248,7 @@ inline double computeLocalCutoff(
         }
     }
 
-    if(localEnvironment.construction == CnaLocalEnvironmentConstruction::Direct){
+    if(descriptor.construction == NativeCnaLocalEnvironmentConstruction::Direct){
         for(int ni1 = 0; ni1 < coordinationNumber; ++ni1){
             neighborArray.setNeighborBond(ni1, ni1, false);
             for(int ni2 = ni1 + 1; ni2 < coordinationNumber; ++ni2){
@@ -416,7 +260,7 @@ inline double computeLocalCutoff(
             }
         }
     }else{
-        for(int ni1 = localEnvironment.bondStartIndex; ni1 < coordinationNumber; ++ni1){
+        for(int ni1 = descriptor.bondStartIndex; ni1 < coordinationNumber; ++ni1){
             for(int ni2 = ni1 + 1; ni2 < coordinationNumber; ++ni2){
                 const Vector3 distance = neighborVectors[ni1] - neighborVectors[ni2];
                 neighborArray.setNeighborBond(ni1, ni2, distance.squaredLength() <= localCutoffSquared);
@@ -437,7 +281,6 @@ inline bool determineLocalStructure(
 ){
     outMatch = {};
 
-    std::array<Vector3, MAX_NEIGHBORS> neighborVectors;
     std::array<int, MAX_NEIGHBORS> cnaSignatures;
     std::array<int, MAX_NEIGHBORS> previousMapping;
     NeighborBondArray neighborArray;
@@ -460,7 +303,7 @@ inline bool determineLocalStructure(
         outMatch.coordinationNumber,
         particleIndex,
         outMatch.neighborIndices.data(),
-        neighborVectors.data(),
+        outMatch.neighborVectors.data(),
         neighborArray,
         false,
         &rejectedByExtraNeighbor
@@ -474,7 +317,7 @@ inline bool determineLocalStructure(
             outMatch.coordinationNumber,
             particleIndex,
             outMatch.neighborIndices.data(),
-            neighborVectors.data(),
+            outMatch.neighborVectors.data(),
             neighborArray,
             true,
             nullptr
@@ -514,19 +357,6 @@ inline bool determineLocalStructure(
     }
 
     outMatch.structureType = structureTypeFor(outMatch.coordinationType);
-    if(outMatch.structureType == StructureType::OTHER){
-        return false;
-    }
-
-    if(!canonicalizeNeighborMapping(
-        outMatch.structureType,
-        neighborVectors.data(),
-        outMatch.coordinationNumber,
-        outMatch.neighborMapping.data()
-    )){
-        return false;
-    }
-
     return outMatch.structureType != StructureType::OTHER;
 }
 

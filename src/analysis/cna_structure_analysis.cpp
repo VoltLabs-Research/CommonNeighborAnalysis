@@ -1,5 +1,6 @@
 #include <volt/analysis/cna_structure_analysis.h>
-#include <volt/analysis/crystal_topology_library.h>
+#include <volt/analysis/crystal_symmetry_utils.h>
+#include <volt/topology/crystal_coordination_topology.h>
 #include <volt/topology/crystal_coordination_topology_init.h>
 
 #include <tbb/blocked_range.h>
@@ -15,81 +16,69 @@ namespace CnaStructureAnalysisDetail{
 
 class CnaCrystalInfoProvider final : public StructureAnalysisCrystalInfo{
 public:
+    std::string_view topologyName(int structureType) const override{
+        switch(structureType){
+            case LATTICE_SC:
+                return "sc";
+            case LATTICE_FCC:
+                return "fcc";
+            case LATTICE_HCP:
+                return "hcp";
+            case LATTICE_BCC:
+                return "bcc";
+            case LATTICE_CUBIC_DIAMOND:
+                return "cubic_diamond";
+            case LATTICE_HEX_DIAMOND:
+                return "hex_diamond";
+            default:
+                return {};
+        }
+    }
+
     int findClosestSymmetryPermutation(int structureType, const Matrix3& rotation) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        return topology ? findClosestSharedCrystalSymmetryPermutation(*topology, rotation) : 0;
+        ensureCoordinationStructuresInitialized();
+
+        const LatticeStructure& lattice = CoordinationStructures::getLatticeStruct(structureType);
+        return AnalysisSymmetryUtils::findClosestSymmetryPermutation(lattice.permutations, rotation);
     }
 
     int coordinationNumber(int structureType) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        return topology ? topology->coordinationNumber : 0;
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getCoordStruct(structureType).numNeighbors;
     }
 
     int commonNeighborIndex(int structureType, int neighborIndex, int commonNeighborSlot) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        if(!topology ||
-           neighborIndex < 0 ||
-           neighborIndex >= topology->coordinationNumber ||
-           commonNeighborSlot < 0 ||
-           commonNeighborSlot > 1){
-            return -1;
-        }
-        return topology->commonNeighbors[static_cast<std::size_t>(neighborIndex)]
-            [static_cast<std::size_t>(commonNeighborSlot)];
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getCoordStruct(structureType)
+            .commonNeighbors[neighborIndex][commonNeighborSlot];
     }
 
     int symmetryPermutationCount(int structureType) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        return topology ? static_cast<int>(topology->symmetries.size()) : 0;
+        ensureCoordinationStructuresInitialized();
+        return static_cast<int>(CoordinationStructures::getLatticeStruct(structureType).permutations.size());
     }
 
     int symmetryPermutationEntry(int structureType, int symmetryIndex, int neighborIndex) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        if(!topology ||
-           symmetryIndex < 0 ||
-           symmetryIndex >= static_cast<int>(topology->symmetries.size()) ||
-           neighborIndex < 0 ||
-           neighborIndex >= topology->coordinationNumber){
-            return neighborIndex;
-        }
-        return topology->symmetries[static_cast<std::size_t>(symmetryIndex)]
-            .permutation[static_cast<std::size_t>(neighborIndex)];
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].permutation[neighborIndex];
     }
 
     const Matrix3& symmetryTransformation(int structureType, int symmetryIndex) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        static const Matrix3 identity = Matrix3::Identity();
-        if(!topology ||
-           symmetryIndex < 0 ||
-           symmetryIndex >= static_cast<int>(topology->symmetries.size())){
-            return identity;
-        }
-        return topology->symmetries[static_cast<std::size_t>(symmetryIndex)].transformation;
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].transformation;
     }
 
     int symmetryInverseProduct(int structureType, int symmetryIndex, int transformationIndex) const override{
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        if(!topology ||
-           symmetryIndex < 0 ||
-           symmetryIndex >= static_cast<int>(topology->symmetries.size())){
-            return 0;
-        }
-        const auto& inverseProduct = topology->symmetries[static_cast<std::size_t>(symmetryIndex)].inverseProduct;
-        if(transformationIndex < 0 || transformationIndex >= static_cast<int>(inverseProduct.size())){
-            return 0;
-        }
-        return inverseProduct[static_cast<std::size_t>(transformationIndex)];
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType)
+            .permutations[symmetryIndex].inverseProduct[transformationIndex];
     }
 
     const Vector3& latticeVector(int structureType, int latticeVectorIndex) const override{
-        static const Vector3 zero = Vector3::Zero();
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        if(!topology ||
-           latticeVectorIndex < 0 ||
-           latticeVectorIndex >= static_cast<int>(topology->latticeVectors.size())){
-            return zero;
-        }
-        return topology->latticeVectors[static_cast<std::size_t>(latticeVectorIndex)];
+        ensureCoordinationStructuresInitialized();
+        return CoordinationStructures::getLatticeStruct(structureType).latticeVectors[latticeVectorIndex];
     }
 };
 
@@ -172,47 +161,6 @@ void identifyStructuresCNA(StructureAnalysis& analysis){
             context.neighborCounts->setInt(index, count);
         }
     });
-
-    std::vector<Vector3> neighborVectorOverrides(
-        N * static_cast<std::size_t>(MAX_NEIGHBORS),
-        Vector3::Zero()
-    );
-    for(std::size_t atomIndex = 0; atomIndex < N; ++atomIndex){
-        const int structureType = context.structureTypes->getInt(atomIndex);
-        if(structureType == LATTICE_OTHER){
-            continue;
-        }
-
-        const SharedCrystalTopology* topology = sharedCrystalTopology(structureType);
-        const CrystalTopologyEntry* topologyEntry = crystalTopologyByStructureType(structureType);
-        if(!topology || !topologyEntry){
-            continue;
-        }
-
-        const int exportableCount = std::min(localCounts[atomIndex], topology->coordinationNumber);
-        const int exportSymmetryIndex = topologyEntry->exportSymmetryIndex >= 0 &&
-            topologyEntry->exportSymmetryIndex < static_cast<int>(topology->symmetries.size())
-            ? topologyEntry->exportSymmetryIndex
-            : 0;
-        for(int neighborSlot = 0; neighborSlot < exportableCount; ++neighborSlot){
-            int latticeVectorIndex = neighborSlot;
-            if(!topology->symmetries.empty()){
-                latticeVectorIndex = topology->symmetries[static_cast<std::size_t>(exportSymmetryIndex)]
-                    .permutation[static_cast<std::size_t>(neighborSlot)];
-            }
-            if(latticeVectorIndex < 0 || latticeVectorIndex >= static_cast<int>(topology->latticeVectors.size())){
-                continue;
-            }
-            neighborVectorOverrides[
-                atomIndex * static_cast<std::size_t>(MAX_NEIGHBORS) +
-                static_cast<std::size_t>(neighborSlot)
-            ] = topology->latticeVectors[static_cast<std::size_t>(latticeVectorIndex)];
-        }
-    }
-    analysis.setNeighborLatticeVectorOverrides(
-        std::move(neighborVectorOverrides),
-        static_cast<std::size_t>(MAX_NEIGHBORS)
-    );
 }
 
 }
