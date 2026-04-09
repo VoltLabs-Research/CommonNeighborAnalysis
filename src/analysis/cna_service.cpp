@@ -180,10 +180,17 @@ json CommonNeighborAnalysisService::compute(
     try{
         StructureAnalysis analysis(context);
         identifyStructuresCNA(analysis);
+        ReconstructedStateCanonicalizer::canonicalizeConnectedStructureSymmetries(analysis, context);
+        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
         CNAClusterInputAdapter clusterInputAdapter;
         clusterInputAdapter.prepare(analysis, context);
         ClusterBuilder clusterBuilder(analysis, context);
         clusterBuilder.build(_dissolveSmallClusters);
+        normalizeReconstructedClusterGraphForExport(analysis, context);
+        if(context.inputCrystalType == LATTICE_FCC){
+            analysis.setNeighborLatticeVectorOverrides({}, 0);
+        }
+        ReconstructedStateCanonicalizer::canonicalizeNeighborShellsToExportConvention(analysis, context);
 
         std::vector<int> atomStructureTypes(
             static_cast<size_t>(frame.natoms),
