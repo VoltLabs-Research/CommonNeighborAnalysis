@@ -5,15 +5,19 @@
 #include <volt/topology/crystal_coordination_pattern.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
 #include <volt/core/particle_property.h>
-#include <volt/structures/crystal_topology_registry.h>
 #include <volt/analysis/structure_analysis_context.h>
 #include <volt/analysis/cna_local_structure.h>
 
 namespace Volt{
-    
+
 class CoordinationStructures{
 public:
-    CoordinationStructures(ParticleProperty* structureTypes, LatticeStructureType inputCrystalType, bool identifyPlanarDefects, const SimulationCell& simCell);
+    CoordinationStructures(
+        ParticleProperty* structureTypes,
+        LatticeStructureType inputCrystalType,
+        bool identifyPlanarDefects,
+        const SimulationCell& simCell
+    );
 
     double determineLocalStructure(
         const NearestNeighborFinder& neighList,
@@ -21,7 +25,7 @@ public:
         int* outNeighborCount,
         int* outOrderedNeighborIndices = nullptr
     ) const;
-    
+
     static void initializeStructures();
 
     void postProcessDiamondNeighbors(
@@ -30,25 +34,57 @@ public:
     ) const;
 
     static const LatticeStructureType getLatticeIdx(int s){
-        const auto* topology = crystalTopologyByStructureType(s);
-        if(!topology || topology->latticeType <= 0){
-            if(s != StructureType::OTHER){
+        switch(s){
+            case StructureType::SC:
+                return LATTICE_SC;
+            case StructureType::FCC:
+                return LATTICE_FCC;
+            case StructureType::HCP:
+                return LATTICE_HCP;
+            case StructureType::BCC:
+                return LATTICE_BCC;
+            case StructureType::CUBIC_DIAMOND:
+            case StructureType::CUBIC_DIAMOND_FIRST_NEIGH:
+            case StructureType::CUBIC_DIAMOND_SECOND_NEIGH:
+                return LATTICE_CUBIC_DIAMOND;
+            case StructureType::HEX_DIAMOND:
+            case StructureType::HEX_DIAMOND_FIRST_NEIGH:
+            case StructureType::HEX_DIAMOND_SECOND_NEIGH:
+                return LATTICE_HEX_DIAMOND;
+            case StructureType::ICO:
+            case StructureType::GRAPHENE:
+                return LATTICE_OTHER;
+            default:
                 spdlog::warn("getLatticeIdx: unknown {}", s);
-            }
-            return LATTICE_OTHER;
+                return LATTICE_OTHER;
         }
-        return static_cast<LatticeStructureType>(topology->latticeType);
     }
 
     static const CoordinationStructureType getCoordIdx(int s){
-        const auto* topology = crystalTopologyByStructureType(s);
-        if(!topology || topology->coordinationType <= 0){
-            if(s != StructureType::OTHER){
+        switch(s){
+            case StructureType::SC:
+                return COORD_SC;
+            case StructureType::FCC:
+                return COORD_FCC;
+            case StructureType::HCP:
+                return COORD_HCP;
+            case StructureType::BCC:
+                return COORD_BCC;
+            case StructureType::CUBIC_DIAMOND:
+            case StructureType::CUBIC_DIAMOND_FIRST_NEIGH:
+            case StructureType::CUBIC_DIAMOND_SECOND_NEIGH:
+                return COORD_CUBIC_DIAMOND;
+            case StructureType::HEX_DIAMOND:
+            case StructureType::HEX_DIAMOND_FIRST_NEIGH:
+            case StructureType::HEX_DIAMOND_SECOND_NEIGH:
+                return COORD_HEX_DIAMOND;
+            case StructureType::ICO:
+            case StructureType::GRAPHENE:
+                return COORD_OTHER;
+            default:
                 spdlog::warn("getCoordIdx: unknown {}", s);
-            }
-            return COORD_OTHER;
+                return COORD_OTHER;
         }
-        return static_cast<CoordinationStructureType>(topology->coordinationType);
     }
 
     static const CoordinationStructure& getCoordStruct(int structureType){
@@ -84,12 +120,44 @@ public:
     static void findNonCoplanarVectors(const CoordinationStructure& coordStruct, int nindices[3], Matrix3& tm1);
 
 private:
+    static void initializeDiamondStructure(
+        int coordType,
+        int latticeType,
+        const Vector3* vectors,
+        int numNeighbors,
+        int totalVectors
+    );
+
+    static void initializeLatticeStructure(
+        int latticeType,
+        const Vector3* vectors,
+        int totalVectors,
+        CoordinationStructure* coordStruct
+    );
+
+    template <typename BondPredicate, typename SignatureFunction>
+    static void initializeCoordinationStructure(
+        int coordType,
+        const Vector3* vectors,
+        int numNeighbors,
+        BondPredicate bondPredicate,
+        SignatureFunction signatureFunction
+    );
+
+    static void initializeFCC();
+    static void initializeSC();
+    static void initializeHCP();
+    static void initializeBCC();
+    static void initializeCubicDiamond();
+    static void initializeHexagonalDiamond();
     static void initializeOther();
-    static void initializeFromRegistry();
-    
+
     static void calculateSymmetryProducts(LatticeStructure& latticeStruct);
+    static void generateSymmetryPermutations(LatticeStructure& latticeStruct);
     static void initializeSymmetryInformation();
-        
+    static void findCommonNeighborsForBond(CoordinationStructure& coordStruct, int neighborIndex);
+    static void initializeCommonNeighbors();
+
     const SimulationCell& _simCell;
     ParticleProperty* _structureTypes;
     LatticeStructureType _inputCrystalType;
